@@ -1,16 +1,36 @@
+import { Navigate, Route, Routes } from 'react-router-dom';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import ProtectedRoute from './components/ProtectedRoute';
+import AuthLayout from './components/AuthLayout';
+import { useAuth } from './context/AuthContext';
+
+function Stub({ title }) {
+  return <div className="p-8 text-xl">{title}</div>;
+}
+
 function App() {
+  const { user } = useAuth();
+
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
-      <section className="max-w-2xl w-full rounded-2xl border border-slate-800 bg-slate-900/60 p-8 shadow-2xl">
-        <h1 className="text-3xl font-bold tracking-tight">Raksha 24x7</h1>
-        <p className="mt-3 text-slate-300">
-          Module 1 is ready: React + Vite + Tailwind frontend and Express + MongoDB backend.
-        </p>
-        <div className="mt-6 text-sm text-slate-400">
-          API health endpoint: <code className="text-emerald-400">/api/health</code>
-        </div>
-      </section>
-    </main>
+    <Routes>
+      <Route element={<AuthLayout />}>
+        <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
+        <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <RegisterPage />} />
+      </Route>
+
+      <Route path="/" element={<Stub title="Landing Page (Public)" />} />
+      <Route path="/emergency-numbers" element={<Stub title="Emergency Numbers (Public)" />} />
+      <Route path="/safety-tips" element={<Stub title="Safety Tips (Public)" />} />
+      <Route path="/about" element={<Stub title="About (Public)" />} />
+      <Route path="/contact" element={<Stub title="Contact (Public)" />} />
+
+      {['/dashboard', '/profile', '/sos', '/emergency-contacts', '/live-location', '/nearby-services', '/google-maps'].map((path) => (
+        <Route key={path} path={path} element={<ProtectedRoute><Stub title={`${path.slice(1)} (Protected)`} /></ProtectedRoute>} />
+      ))}
+
+      <Route path="*" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
+    </Routes>
   );
 }
 

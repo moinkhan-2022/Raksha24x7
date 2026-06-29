@@ -5,3 +5,11 @@
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
 }
+
+body {
+  @apply bg-slate-950 text-slate-100;
+}
+
+.glass {
+  @apply bg-white/10 border border-white/20 backdrop-blur-xl shadow-2xl;
+}
