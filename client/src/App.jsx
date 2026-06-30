@@ -5,6 +5,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import AuthLayout from './components/AuthLayout';
 import LandingPage from './pages/LandingPage';
 import Dashboard from './pages/Dashboard';
+import ProfilePage from './pages/ProfilePage';
 import { useAuth } from './context/AuthContext';
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
 
       <Route path="/" element={<LandingPage />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+      <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
 
       <Route path="/emergency-numbers" element={<LandingPage />} />
       <Route path="/safety-tips" element={<LandingPage />} />
