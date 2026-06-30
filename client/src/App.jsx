@@ -18,9 +18,9 @@ function App() {
         <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <RegisterPage />} />
       </Route>
       <Route path="/" element={<LandingPage />} />
-      <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-      <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-      <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+      <Route path="/dashboard" element={<ProtectedRoute allowGuest><Dashboard /></ProtectedRoute>} />
+      <Route path="/profile" element={<ProtectedRoute allowGuest={false}><ProfilePage /></ProtectedRoute>} />
+      <Route path="/settings" element={<ProtectedRoute allowGuest={false}><SettingsPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to={user ? '/dashboard' : '/'} replace />} />
     </Routes>
   );

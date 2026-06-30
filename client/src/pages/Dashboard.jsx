@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { LifeBuoy, LocateFixed, MapPinned, PhoneCall, ShieldCheck, Users } from 'lucide-react';
 import Navbar from '../components/Navbar';
+import { useAuth } from '../context/AuthContext';
 
 const cards = [
   { icon: LifeBuoy, title: 'SOS', subtitle: 'Trigger immediate emergency alert' },
@@ -16,12 +17,14 @@ function CardSkeleton() {
 }
 
 function Dashboard() {
+  const { user } = useAuth();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950">
       <Navbar dashboard />
       <main className="mx-auto max-w-7xl px-4 py-6 md:px-6">
         <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
-          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+          <h1 className="text-2xl font-bold text-white">Welcome, {user?.name || 'User'}</h1>
           <p className="mt-2 text-slate-300">Stay Safe. Emergency help is always available.</p>
         </motion.section>
 

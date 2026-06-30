@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import Toast from '../components/Toast';
 
 function LoginPage() {
-  const { login } = useAuth();
+  const { login, loginAsGuest } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: '', password: '', remember: true });
   const [show, setShow] = useState(false);
@@ -23,6 +23,11 @@ function LoginPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const onGuest = () => {
+    loginAsGuest();
+    navigate('/dashboard');
   };
 
   return (
@@ -44,7 +49,7 @@ function LoginPage() {
             <button type="button" className="text-indigo-300">Forgot Password</button>
           </div>
           <button className="w-full p-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition" disabled={loading}>{loading ? 'Loading...' : 'Login'}</button>
-          <button type="button" className="w-full p-3 rounded-lg bg-slate-700">Continue as Guest</button>
+          <button type="button" onClick={onGuest} className="w-full p-3 rounded-lg bg-slate-700 hover:bg-slate-600 transition">Continue as Guest</button>
         </form>
         <p className="mt-5 text-sm text-center">No account? <Link className="text-indigo-300" to="/register">Register</Link></p>
       </div>
