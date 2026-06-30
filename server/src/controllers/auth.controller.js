@@ -19,7 +19,46 @@ const safeUser = (user) => ({
   contacts: user.contacts || []
 });
 
-export const register = async (req, res) => { try { const { name, email, phone, password } = req.body; const existing = await User.findOne({ email }); if (existing) return res.status(409).json({ success: false, message: 'Email already registered' }); const user = await User.create({ name, email, phone: phone || '', password }); const token = signToken({ id: user._id, role: user.role }); return res.status(201).json({ success: true, message: 'Registered successfully', token, user: safeUser(user) }); } catch (error) { if (error?.code === 11000) return res.status(409).json({ success: false, message: 'Email already registered' }); return res.status(500).json({ success: false, message: 'Server error' }); } };
+export const register = async (req, res) => {
+  try {
+    // temporary debug logs
+    // eslint-disable-next-line no-console
+    console.log('register req.body:', req.body);
+
+    const { name, email, phone, password } = req.body;
+
+    if (!name || !email || !phone || !password || !req.body.confirmPassword) {
+      return res.status(400).json({ success: false, message: 'All fields are required' });
+    }
+
+    const existingEmail = await User.findOne({ email });
+    if (existingEmail) return res.status(409).json({ success: false, message: 'Email already registered' });
+
+    const existingPhone = await User.findOne({ phone });
+    if (existingPhone) return res.status(409).json({ success: false, message: 'Phone number already registered' });
+
+    const user = await User.create({ name, email, phone, password });
+
+    // eslint-disable-next-line no-console
+    console.log('created user:', user?._id?.toString());
+
+    const token = signToken({ id: user._id, role: user.role });
+
+    // eslint-disable-next-line no-console
+    console.log('jwt created for user:', user?._id?.toString());
+
+    return res.status(201).json({ success: true, message: 'Registered successfully', token, user: safeUser(user) });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('register full error:', error);
+    if (error?.code === 11000) {
+      if (error?.keyPattern?.email) return res.status(409).json({ success: false, message: 'Email already registered' });
+      if (error?.keyPattern?.phone) return res.status(409).json({ success: false, message: 'Phone number already registered' });
+      return res.status(409).json({ success: false, message: 'Duplicate data' });
+    }
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
 
 export const login = async (req, res) => { try { const { email, password } = req.body; const user = await User.findOne({ email }).select('+password'); if (!user) return res.status(401).json({ success: false, message: 'Invalid email or password' }); const ok = await user.comparePassword(password); if (!ok) return res.status(401).json({ success: false, message: 'Invalid email or password' }); user.lastLogin = new Date(); await user.save(); const token = signToken({ id: user._id, role: user.role }); return res.status(200).json({ success: true, message: 'Login successful', token, user: safeUser(user) }); } catch { return res.status(500).json({ success: false, message: 'Server error' }); } };
 

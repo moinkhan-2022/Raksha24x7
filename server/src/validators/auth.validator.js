@@ -1,14 +1,28 @@
 import { body } from 'express-validator';
 
+const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+
 export const registerValidator = [
-  body('name').trim().notEmpty().withMessage('Name is required'),
-  body('email').isEmail().withMessage('Valid email is required').normalizeEmail(),
-  body('phone').optional({ nullable: true, checkFalsy: true }).matches(/^\d{10}$/).withMessage('Phone must be 10 digits'),
-  body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+  body('name').trim().notEmpty().withMessage('All fields are required'),
+  body('email')
+    .notEmpty().withMessage('All fields are required')
+    .bail()
+    .isEmail().withMessage('Invalid email format')
+    .normalizeEmail(),
+  body('phone')
+    .notEmpty().withMessage('All fields are required')
+    .bail()
+    .matches(/^\d{10}$/).withMessage('Phone number must contain exactly 10 digits'),
+  body('password')
+    .notEmpty().withMessage('All fields are required')
+    .bail()
+    .matches(strongPasswordRegex)
+    .withMessage('Password must contain at least 8 characters, one uppercase letter, one lowercase letter and one number'),
   body('confirmPassword')
-    .optional({ nullable: true, checkFalsy: true })
-    .custom((value, { req }) => !value || value === req.body.password)
-    .withMessage('Confirm Password must match Password')
+    .notEmpty().withMessage('All fields are required')
+    .bail()
+    .custom((value, { req }) => value === req.body.password)
+    .withMessage('Passwords do not match')
 ];
 
 export const loginValidator = [

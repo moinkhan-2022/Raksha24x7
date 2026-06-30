@@ -48,12 +48,24 @@ export function AuthProvider({ children }) {
   };
 
   const register = async (payload) => {
-    const { data } = await api.post('/auth/register', payload);
-    localStorage.setItem('raksha_token', data.token);
-    localStorage.removeItem('raksha_guest');
-    localStorage.setItem('raksha_user', JSON.stringify(data.user));
-    setUser(data.user);
-    return data;
+    // temporary debug logs
+    // eslint-disable-next-line no-console
+    console.log('Sending registration:', payload);
+    try {
+      const response = await api.post('/auth/register', payload);
+      // eslint-disable-next-line no-console
+      console.log('Response:', response);
+      const { data } = response;
+      localStorage.setItem('raksha_token', data.token);
+      localStorage.removeItem('raksha_guest');
+      localStorage.setItem('raksha_user', JSON.stringify(data.user));
+      setUser(data.user);
+      return data;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error.response || error);
+      throw error;
+    }
   };
 
   const logout = async () => {
