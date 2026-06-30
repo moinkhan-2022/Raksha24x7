@@ -21,11 +21,12 @@ function ProfilePage() {
     profileService.getProfile().then(({ data }) => {
       setUser(data.user);
       setForm({ name: data.user.name || '', email: data.user.email || '', phone: data.user.phone || '' });
-    }).finally(() => setLoading(false));
+    }).catch((e)=>setToast(e.response?.data?.message || 'Failed to load profile')).finally(() => setLoading(false));
   }, []);
 
   const saveProfile = async () => {
     try {
+      if (!form.name.trim() || !/^\d{10}$/.test(form.phone || '')) return setToast('Enter valid name and 10-digit phone');
       const { data } = await profileService.updateProfile({ name: form.name, phone: form.phone });
       setUser(data.user); setOpenEdit(false); setToast('Profile updated successfully');
     } catch (e) { setToast(e.response?.data?.message || 'Update failed'); }
@@ -33,6 +34,10 @@ function ProfilePage() {
 
   const upload = async (file) => {
     try {
+      if (!file) return;
+      const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!allowed.includes(file.type)) return setToast('Invalid image format');
+      if (file.size > 2 * 1024 * 1024) return setToast('Image size must be <= 2MB');
       const { data } = await profileService.uploadPhoto(file);
       setUser(data.user); setToast('Photo updated');
     } catch (e) { setToast(e.response?.data?.message || 'Photo upload failed'); }
@@ -61,7 +66,7 @@ function ProfilePage() {
               <ProfileAvatar src={user.profileImage || user.avatar} name={user.name} />
               <input type="file" accept=".jpg,.jpeg,.png,.webp" onChange={(e)=>e.target.files?.[0] && upload(e.target.files[0])} />
               <button onClick={remove} className="rounded bg-rose-600 px-3 py-2">Remove Image</button>
-              <p>{user.name}</p><p>{user.email}</p><p>{user.phone}</p>
+              <p>{user.name}</p><p>{user.email}</p><p>{user.phone || '-'}</p>
               <p>Member Since: {new Date(user.memberSince || user.createdAt).toLocaleDateString()}</p>
               <p>Account Status: {user.accountStatus || 'active'}</p>
               <p>Last Login: {new Date(user.lastLogin || Date.now()).toLocaleString()}</p>

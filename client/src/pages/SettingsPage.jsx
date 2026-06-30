@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import ProfileCard from '../components/ProfileCard';
 import Toast from '../components/Toast';
@@ -7,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 
 function SettingsPage() {
   const { logout } = useAuth();
+  const navigate = useNavigate();
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [toast, setToast] = useState('');
 
@@ -18,10 +20,16 @@ function SettingsPage() {
     } catch (e) { setToast(e.response?.data?.message || 'Password change failed'); }
   };
 
+  const doLogout = async () => {
+    await logout();
+    navigate('/');
+  };
+
   const deleteAccount = async () => {
     if (!window.confirm('Are you sure you want to delete account?')) return;
     await profileService.deleteAccount();
     await logout();
+    navigate('/');
   };
 
   return (
@@ -36,7 +44,7 @@ function SettingsPage() {
             <input className="w-full rounded-lg bg-slate-800 p-3" type="password" placeholder="Confirm Password" value={form.confirmPassword} onChange={(e)=>setForm({...form,confirmPassword:e.target.value})} />
             <div className="flex flex-wrap gap-2">
               <button onClick={changePassword} className="rounded bg-amber-600 px-4 py-2">Change Password</button>
-              <button onClick={logout} className="rounded bg-red-600 px-4 py-2">Logout</button>
+              <button onClick={doLogout} className="rounded bg-red-600 px-4 py-2">Logout</button>
               <button onClick={deleteAccount} className="rounded border border-red-500/40 bg-red-500/10 px-4 py-2">Delete Account</button>
             </div>
           </div>
