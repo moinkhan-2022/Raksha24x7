@@ -3,10 +3,11 @@ import { body } from 'express-validator';
 export const registerValidator = [
   body('name').trim().notEmpty().withMessage('Name is required'),
   body('email').isEmail().withMessage('Valid email is required').normalizeEmail(),
-  body('phone').matches(/^\d{10}$/).withMessage('Phone must be 10 digits'),
+  body('phone').optional({ nullable: true, checkFalsy: true }).matches(/^\d{10}$/).withMessage('Phone must be 10 digits'),
   body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
   body('confirmPassword')
-    .custom((value, { req }) => value === req.body.password)
+    .optional({ nullable: true, checkFalsy: true })
+    .custom((value, { req }) => !value || value === req.body.password)
     .withMessage('Confirm Password must match Password')
 ];
 
