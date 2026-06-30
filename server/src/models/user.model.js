@@ -23,7 +23,9 @@ const userSchema = new mongoose.Schema(
       type: [contactSchema],
       validate: { validator: (v) => v.length <= 5, message: 'Maximum 5 contacts are allowed' },
       default: []
-    }
+    },
+    resetPasswordToken: { type: String, default: null, select: false },
+    resetPasswordExpire: { type: Date, default: null, select: false }
   },
   { timestamps: true }
 );
