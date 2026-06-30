@@ -4,7 +4,8 @@ const contactService = {
   getAll: () => api.get('/contacts'),
   create: (payload) => api.post('/contacts', payload),
   update: (id, payload) => api.put(`/contacts/${id}`, payload),
-  remove: (id) => api.delete(`/contacts/${id}`)
+  remove: (id) => api.delete(`/contacts/${id}`),
+  setPrimary: (id) => api.patch(`/contacts/${id}/primary`)
 };
 
 export default contactService;

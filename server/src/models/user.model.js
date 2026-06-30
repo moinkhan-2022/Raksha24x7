@@ -4,8 +4,9 @@ import bcrypt from 'bcryptjs';
 const contactSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   relationship: { type: String, required: true, trim: true },
-  phone: { type: String, required: true, trim: true }
-});
+  phone: { type: String, required: true, trim: true },
+  isPrimary: { type: Boolean, default: false }
+}, { timestamps: true });
 
 const userSchema = new mongoose.Schema(
   {

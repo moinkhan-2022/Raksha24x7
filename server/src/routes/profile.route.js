@@ -9,6 +9,7 @@ import {
   deletePhoto,
   getContacts,
   getProfile,
+  setPrimaryContact,
   updateContact,
   updateProfile,
   uploadPhoto
@@ -26,6 +27,7 @@ router.get('/contacts', getContacts);
 router.post('/contacts', addContact);
 router.put('/contacts/:id', updateContact);
 router.delete('/contacts/:id', deleteContact);
+router.patch('/contacts/:id/primary', setPrimaryContact);
 
 router.put('/change-password', changePassword);
 router.delete('/account', deleteAccount);
