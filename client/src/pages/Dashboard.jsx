@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { LifeBuoy, LocateFixed, MapPinned, PhoneCall, ShieldCheck, Users } from 'lucide-react';
+import { LifeBuoy, LocateFixed, Map, MapPinned, PhoneCall, ShieldCheck, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../context/AuthContext';
@@ -11,9 +11,10 @@ import locationService from '../services/locationService';
 
 const cards = [
   { icon: LifeBuoy, title: 'SOS', subtitle: 'Trigger immediate emergency alert' },
-  { icon: LocateFixed, title: 'Live Location', subtitle: 'Share real-time location with contacts' },
+  { icon: LocateFixed, title: 'Live Location', subtitle: 'Share real-time location with contacts', path: '/live-location' },
+  { icon: Map, title: 'Google Maps', subtitle: 'View your current location on an interactive map', path: '/google-map' },
   { icon: Users, title: 'Contacts', subtitle: 'Manage emergency contact list' },
-  { icon: MapPinned, title: 'Nearby Services', subtitle: 'Locate hospitals and police nearby' },
+  { icon: MapPinned, title: 'Nearby Services', subtitle: 'Locate hospitals and police nearby', path: '/nearby-services' },
   { icon: PhoneCall, title: 'Emergency Numbers', subtitle: 'Quick access to helplines' },
   { icon: ShieldCheck, title: 'Safety Tips', subtitle: 'Read practical safety guidance' }
 ];
@@ -133,7 +134,7 @@ function Dashboard() {
 
         <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {cards.map((c) => (
-            <motion.button key={c.title} onClick={() => c.title === 'Live Location' && navigate('/live-location')} whileHover={{ y: -4 }} className="w-full rounded-2xl border border-white/10 bg-white/5 p-5 text-left backdrop-blur-xl hover:bg-white/10">
+            <motion.button key={c.title} onClick={() => c.path && navigate(c.path)} whileHover={{ y: -4 }} className="w-full rounded-2xl border border-white/10 bg-white/5 p-5 text-left backdrop-blur-xl hover:bg-white/10">
               <c.icon className="mb-3 h-6 w-6 text-blue-300" />
               <p className="font-semibold text-white">{c.title}</p>
               <p className="mt-1 text-sm text-slate-300">{c.title === 'Live Location' && latestLocation ? `Last: ${latestLocation.latitude.toFixed(4)}, ${latestLocation.longitude.toFixed(4)}` : c.subtitle}</p>

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { ExternalLink, Trash2 } from 'lucide-react';
+import { ExternalLink, Map, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Toast from '../components/Toast';
 import sosService from '../services/sosService';
 
 function SosHistoryPage() {
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState('');
@@ -38,6 +40,9 @@ function SosHistoryPage() {
                 <p className="text-slate-300">Status: {i.status}</p>
                 <div className="mt-3 flex gap-2">
                   <a href={i.googleMapLink} target="_blank" rel="noreferrer" className="rounded bg-blue-600 px-3 py-1 text-sm"><ExternalLink className="inline h-3 w-3" /> Google Maps</a>
+                  {Number.isFinite(Number(i.latitude)) && Number.isFinite(Number(i.longitude)) && (
+                    <button onClick={() => navigate('/google-map', { state: { location: { ...i, timestamp: i.createdAt } } })} className="rounded bg-indigo-600 px-3 py-1 text-sm"><Map className="inline h-3 w-3" /> View on Map</button>
+                  )}
                   <button onClick={() => remove(i._id)} className="rounded bg-rose-600 px-3 py-1 text-sm"><Trash2 className="inline h-3 w-3" /> Delete</button>
                 </div>
               </div>

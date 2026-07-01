@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -13,6 +14,9 @@ import EmergencyContactsPage from './pages/EmergencyContactsPage';
 import SosHistoryPage from './pages/SosHistoryPage';
 import LiveLocationPage from './pages/LiveLocationPage';
 import { useAuth } from './context/AuthContext';
+
+const GoogleMapPage = lazy(() => import('./pages/GoogleMapPage'));
+const NearbyServicesPage = lazy(() => import('./pages/NearbyServicesPage'));
 
 function App() {
   const { user } = useAuth();
@@ -31,6 +35,8 @@ function App() {
       <Route path="/emergency-contacts" element={<ProtectedRoute allowGuest={false}><EmergencyContactsPage /></ProtectedRoute>} />
       <Route path="/sos-history" element={<ProtectedRoute allowGuest={false}><SosHistoryPage /></ProtectedRoute>} />
       <Route path="/live-location" element={<ProtectedRoute allowGuest={false}><LiveLocationPage /></ProtectedRoute>} />
+      <Route path="/google-map" element={<ProtectedRoute allowGuest={false}><Suspense fallback={<div className="grid min-h-screen place-items-center bg-slate-950 text-slate-300">Loading map...</div>}><GoogleMapPage /></Suspense></ProtectedRoute>} />
+      <Route path="/nearby-services" element={<ProtectedRoute allowGuest={false}><Suspense fallback={<div className="grid min-h-screen place-items-center bg-slate-950 text-slate-300">Loading nearby services...</div>}><NearbyServicesPage /></Suspense></ProtectedRoute>} />
       <Route path="*" element={<Navigate to={user ? '/dashboard' : '/'} replace />} />
     </Routes>
   );

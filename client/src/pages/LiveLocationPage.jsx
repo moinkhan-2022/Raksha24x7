@@ -4,6 +4,7 @@ import {
   Clipboard,
   ExternalLink,
   LocateFixed,
+  Map,
   MapPin,
   Radio,
   RefreshCw,
@@ -11,6 +12,7 @@ import {
   Square,
   Trash2
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Toast from '../components/Toast';
 import locationService from '../services/locationService';
@@ -48,6 +50,7 @@ const copyText = async (text) => {
 };
 
 function LiveLocationPage() {
+  const navigate = useNavigate();
   const [location, setLocation] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -281,9 +284,10 @@ function LiveLocationPage() {
             <div className="mt-6 rounded-2xl border border-dashed border-white/15 p-8 text-center text-slate-300">No location detected yet.</div>
           )}
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <ActionButton onClick={copyLocation} disabled={!location} icon={Clipboard} label="Copy Location" />
             <ActionButton onClick={shareLocation} disabled={!location} icon={Share2} label="Share Location" />
+            <ActionButton onClick={() => navigate('/google-map', { state: { location } })} disabled={!location} icon={Map} label="View on Map" />
             <ActionButton onClick={requestCurrentLocation} disabled={loading} icon={RefreshCw} label={loading ? 'Locating...' : 'Refresh Location'} spin={loading} />
             <ActionButton onClick={startTracking} disabled={tracking} icon={Radio} label="Start Tracking" accent="emerald" />
             <ActionButton onClick={() => stopTracking()} disabled={!tracking} icon={Square} label="Stop Tracking" accent="rose" />
