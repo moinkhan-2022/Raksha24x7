@@ -5,6 +5,9 @@ node_modules/
 # Build output
 dist/
 build/
+.vite/
+uploads/
+coverage/
 
 # Logs
 npm-debug.log*
