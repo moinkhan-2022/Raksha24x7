@@ -78,6 +78,7 @@ export const SERVICE_CATEGORIES = [
 // Women-focused searches share one filter while retaining distinct labels.
 export const SERVICE_FILTERS = [
   { id: 'all', label: 'All', color: '#64748b' },
+  { id: 'favorites', label: 'Favorites', color: '#f59e0b' },
   { id: 'hospital', label: 'Hospitals', color: '#ef4444' },
   { id: 'police', label: 'Police', color: '#2563eb' },
   { id: 'fire', label: 'Fire', color: '#f97316' },

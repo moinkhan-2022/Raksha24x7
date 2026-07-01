@@ -1,11 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useJsApiLoader } from '@react-google-maps/api';
-import { AlertTriangle, ExternalLink, MapPin, RefreshCw, Search, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, Heart, History, MapPin, RefreshCw, Search } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import NearbyFilterBar from '../components/NearbyFilterBar';
 import NearbyMap from '../components/NearbyMap';
+import NearbySearchBar from '../components/NearbySearchBar';
+import ServiceList from '../components/ServiceList';
+import Toast from '../components/Toast';
 import { getNearbyEmergencyServices } from '../services/googlePlacesService';
+import { getServiceDistance } from '../utils/distance';
 import { GOOGLE_MAP_LIBRARIES, GOOGLE_MAP_LOADER_ID } from '../utils/googleMapConfig';
+import {
+  addRecentlyViewedService,
+  getFavoriteServices,
+  getRecentlyViewedServices,
+  storedServiceToNearby,
+  toggleFavoriteService
+} from '../utils/nearbyStorage';
+import { filterServicesByQuery, sortServices } from '../utils/serviceResults';
 
 const GEOLOCATION_OPTIONS = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
 
@@ -15,6 +27,13 @@ const locationErrorMessage = (error) => {
   if (error?.code === 3) return 'Getting your location timed out. Please try again.';
   return 'Unable to detect your current location.';
 };
+
+const enrichWithDistance = (service, userLocation) => ({
+  ...service,
+  ...getServiceDistance(userLocation, service),
+  userLatitude: userLocation?.latitude,
+  userLongitude: userLocation?.longitude
+});
 
 function NearbyServicesPage() {
   const apiKey = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
@@ -36,7 +55,11 @@ function NearbyServicesExperience({ apiKey }) {
   const [userLocation, setUserLocation] = useState(null);
   const [mapInstance, setMapInstance] = useState(null);
   const [services, setServices] = useState([]);
+  const [favorites, setFavorites] = useState(() => getFavoriteServices());
+  const [recentlyViewed, setRecentlyViewed] = useState(() => getRecentlyViewedServices());
   const [activeFilter, setActiveFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState('nearest');
   const [selectedService, setSelectedService] = useState(null);
   const [locationLoading, setLocationLoading] = useState(true);
   const [servicesLoading, setServicesLoading] = useState(false);
@@ -44,6 +67,7 @@ function NearbyServicesExperience({ apiKey }) {
   const [servicesError, setServicesError] = useState('');
   const [searchWarnings, setSearchWarnings] = useState([]);
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const [toast, setToast] = useState({ message: '', type: 'success' });
   const mountedRef = useRef(true);
   const searchIdRef = useRef(0);
 
@@ -52,6 +76,14 @@ function NearbyServicesExperience({ apiKey }) {
     googleMapsApiKey: apiKey,
     libraries: GOOGLE_MAP_LIBRARIES
   });
+
+  const showToast = useCallback((message, type = 'success') => setToast({ message, type }), []);
+
+  useEffect(() => {
+    if (!toast.message) return undefined;
+    const timer = window.setTimeout(() => setToast({ message: '', type: 'success' }), 2800);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   const requestCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) {
@@ -95,7 +127,6 @@ function NearbyServicesExperience({ apiKey }) {
   useEffect(() => {
     if (!isLoaded || !mapInstance || !userLocation) return undefined;
 
-    // Each refresh gets an ID so an older Places response cannot replace newer results.
     const searchId = ++searchIdRef.current;
     setServicesLoading(true);
     setServicesError('');
@@ -123,29 +154,80 @@ function NearbyServicesExperience({ apiKey }) {
     return () => { searchIdRef.current += 1; };
   }, [isLoaded, mapInstance, refreshVersion, userLocation]);
 
-  const visibleServices = useMemo(
-    () => activeFilter === 'all' ? services : services.filter((service) => service.filterId === activeFilter),
-    [activeFilter, services]
+  const nearbyWithDistance = useMemo(
+    () => services.map((service) => enrichWithDistance(service, userLocation)),
+    [services, userLocation]
   );
 
-  const filterCounts = useMemo(() => services.reduce((counts, service) => ({
+  const favoriteServices = useMemo(
+    () => favorites.map(storedServiceToNearby).map((service) => enrichWithDistance(service, userLocation)),
+    [favorites, userLocation]
+  );
+
+  const recentServices = useMemo(
+    () => recentlyViewed.map(storedServiceToNearby).map((service) => enrichWithDistance(service, userLocation)),
+    [recentlyViewed, userLocation]
+  );
+
+  const favoriteIds = useMemo(() => new Set(favorites.map((service) => service.placeId)), [favorites]);
+
+  const visibleServices = useMemo(() => {
+    const categoryServices = activeFilter === 'favorites'
+      ? favoriteServices
+      : activeFilter === 'all'
+        ? nearbyWithDistance
+        : nearbyWithDistance.filter((service) => service.filterId === activeFilter);
+    const searched = filterServicesByQuery(categoryServices, searchQuery);
+    return sortServices(searched, sortBy);
+  }, [activeFilter, favoriteServices, nearbyWithDistance, searchQuery, sortBy]);
+
+  const filterCounts = useMemo(() => nearbyWithDistance.reduce((counts, service) => ({
     ...counts,
     all: (counts.all || 0) + 1,
+    favorites: favorites.length,
     [service.filterId]: (counts[service.filterId] || 0) + 1
-  }), {}), [services]);
+  }), { favorites: favorites.length }), [favorites.length, nearbyWithDistance]);
 
   useEffect(() => {
-    if (selectedService && !visibleServices.some((service) => service.id === selectedService.id)) {
+    if (selectedService && !visibleServices.some((service) => service.placeId === selectedService.placeId)) {
       setSelectedService(null);
     }
   }, [selectedService, visibleServices]);
 
-  const selectService = (service) => {
+  const recordRecentlyViewed = useCallback((service) => {
+    if (!service) return;
+    try {
+      setRecentlyViewed(addRecentlyViewedService(service));
+    } catch {
+      showToast('Recently viewed services could not be saved', 'error');
+    }
+  }, [showToast]);
+
+  const selectService = useCallback((service) => {
     setSelectedService(service);
-    if (service && mapInstance) {
+    if (!service) return;
+    recordRecentlyViewed(service);
+    if (mapInstance) {
       mapInstance.panTo({ lat: service.latitude, lng: service.longitude });
       mapInstance.setZoom(16);
     }
+  }, [mapInstance, recordRecentlyViewed]);
+
+  const toggleFavorite = useCallback((service) => {
+    try {
+      const result = toggleFavoriteService(service);
+      setFavorites(result.favorites);
+      showToast(result.isFavorite ? 'Service saved to favorites' : 'Service removed from favorites');
+    } catch {
+      showToast('Favorite could not be saved to this browser', 'error');
+    }
+  }, [showToast]);
+
+  const commonListProps = {
+    favoriteIds,
+    selectedServiceId: selectedService?.id,
+    onToggleFavorite: toggleFavorite,
+    onNotify: showToast
   };
 
   if (loadError) {
@@ -156,19 +238,15 @@ function NearbyServicesExperience({ apiKey }) {
 
   return (
     <main className="mx-auto max-w-[1600px] px-4 py-5 md:px-6">
+      <Toast message={toast.message} type={toast.type} />
       <section className="rounded-3xl border border-white/10 bg-white/5 p-5 shadow-2xl shadow-blue-950/30 backdrop-blur-xl md:p-6">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-300">5 km Safety Radius</p>
             <h1 className="mt-2 text-2xl font-bold md:text-3xl">Nearby Emergency Services</h1>
-            <p className="mt-2 text-sm text-slate-300">Hospitals, responders, pharmacies, and women-focused support around you.</p>
+            <p className="mt-2 text-sm text-slate-300">Search, compare, save, and contact emergency support around you.</p>
           </div>
-          <button
-            type="button"
-            onClick={requestCurrentLocation}
-            disabled={locationLoading || servicesLoading}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-          >
+          <button type="button" onClick={requestCurrentLocation} disabled={locationLoading || servicesLoading} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50">
             <RefreshCw className={`h-4 w-4 ${locationLoading || servicesLoading ? 'animate-spin' : ''}`} />
             {locationLoading ? 'Getting location...' : servicesLoading ? 'Loading services...' : 'Refresh'}
           </button>
@@ -180,95 +258,47 @@ function NearbyServicesExperience({ apiKey }) {
           <CoordinateCard label="Visible Results" value={servicesLoading ? 'Loading...' : String(visibleServices.length)} />
         </div>
 
-        <div className="mt-5">
-          <NearbyFilterBar
-            activeFilter={activeFilter}
-            counts={filterCounts}
-            onFilterChange={setActiveFilter}
-            disabled={servicesLoading}
-          />
-        </div>
+        <div className="mt-5"><NearbyFilterBar activeFilter={activeFilter} counts={filterCounts} onFilterChange={setActiveFilter} disabled={servicesLoading} /></div>
+        <div className="mt-4"><NearbySearchBar query={searchQuery} onSearchChange={setSearchQuery} sortBy={sortBy} onSortChange={setSortBy} resultCount={visibleServices.length} /></div>
       </section>
 
       {locationError && <InlineAlert message={locationError} />}
       {servicesError && <InlineAlert message={servicesError} />}
-      {searchWarnings.length > 0 && (
-        <InlineAlert message={`Some service categories could not be loaded: ${searchWarnings.join(' ')}`} warning />
-      )}
+      {searchWarnings.length > 0 && <InlineAlert message={`Some service categories could not be loaded: ${searchWarnings.join(' ')}`} warning />}
 
-      <section className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_350px]">
-        <div className="relative h-[58vh] min-h-[460px] overflow-hidden rounded-3xl border border-white/10 bg-slate-950 shadow-2xl shadow-blue-950/40 lg:h-[calc(100vh-15rem)] lg:min-h-[590px]">
+      <section className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_430px]">
+        <div className="relative h-[58vh] min-h-[460px] overflow-hidden rounded-3xl border border-white/10 bg-slate-950 shadow-2xl shadow-blue-950/40 lg:sticky lg:top-20 lg:h-[calc(100vh-6rem)] lg:min-h-[590px]">
           {userLocation ? (
-            <NearbyMap
-              userLocation={userLocation}
-              services={visibleServices}
-              selectedService={selectedService}
-              onSelectService={selectService}
-              onMapLoad={setMapInstance}
-              onMapUnmount={() => setMapInstance(null)}
-            />
+            <NearbyMap userLocation={userLocation} services={visibleServices} selectedService={selectedService} onSelectService={selectService} onMapLoad={setMapInstance} onMapUnmount={() => setMapInstance(null)} />
           ) : (
-            <div className="grid h-full place-items-center p-6 text-center">
-              <div>
-                <MapPin className="mx-auto h-10 w-10 text-blue-300" />
-                <p className="mt-4 font-semibold">{locationLoading ? 'Getting your current location...' : 'Location is required to search nearby services.'}</p>
-                <p className="mt-2 text-sm text-slate-400">Allow location access, then use Refresh.</p>
-              </div>
-            </div>
+            <div className="grid h-full place-items-center p-6 text-center"><div><MapPin className="mx-auto h-10 w-10 text-blue-300" /><p className="mt-4 font-semibold">{locationLoading ? 'Getting your current location...' : 'Location is required to search nearby services.'}</p><p className="mt-2 text-sm text-slate-400">Allow location access, then use Refresh.</p></div></div>
           )}
-
-          {servicesLoading && userLocation && (
-            <div className="absolute inset-x-3 top-3 flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-slate-950/90 px-4 py-3 text-sm shadow-xl backdrop-blur-xl md:left-1/2 md:right-auto md:-translate-x-1/2">
-              <RefreshCw className="h-4 w-4 animate-spin text-blue-300" /> Loading nearby services...
-            </div>
-          )}
+          {servicesLoading && userLocation && <div className="absolute inset-x-3 top-3 flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-slate-950/90 px-4 py-3 text-sm shadow-xl backdrop-blur-xl md:left-1/2 md:right-auto md:-translate-x-1/2"><RefreshCw className="h-4 w-4 animate-spin text-blue-300" /> Loading nearby services...</div>}
         </div>
 
-        <aside className="max-h-[590px] overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl lg:max-h-[calc(100vh-15rem)] lg:min-h-[590px]">
-          <div className="flex items-center justify-between border-b border-white/10 p-4">
-            <div>
-              <h2 className="font-semibold">Visible Services</h2>
-              <p className="text-xs text-slate-400">{visibleServices.length} result{visibleServices.length === 1 ? '' : 's'}</p>
-            </div>
-            <Search className="h-5 w-5 text-blue-300" />
-          </div>
-
-          <div className="max-h-[520px] space-y-2 overflow-y-auto p-3 lg:max-h-[calc(100vh-20rem)]">
-            {!servicesLoading && visibleServices.length === 0 ? (
-              <div className="p-6 text-center text-sm text-slate-400">
-                <ShieldAlert className="mx-auto h-8 w-8 text-slate-500" />
-                <p className="mt-3">No nearby results found for this filter.</p>
-              </div>
-            ) : visibleServices.map((service) => (
-              <div
-                key={service.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => selectService(service)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') selectService(service);
-                }}
-                className={`w-full rounded-2xl border p-3 text-left transition ${selectedService?.id === service.id ? 'border-blue-400/50 bg-blue-500/15' : 'border-white/10 bg-slate-950/35 hover:bg-white/10'}`}
-              >
-                <div className="flex items-start gap-3">
-                  <span className="mt-1 h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: service.color }} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold text-slate-100">{service.name}</p>
-                    <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-400">{service.categoryLabel}</p>
-                    <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-slate-400">{service.address}</p>
-                    <div className="mt-2 flex items-center justify-between gap-2 text-xs">
-                      <span className="text-amber-300">{service.rating == null ? 'No rating' : `★ ${service.rating.toFixed(1)}`}</span>
-                      <a href={service.googleMapsLink} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="inline-flex items-center gap-1 text-blue-300 hover:text-blue-200"><ExternalLink className="h-3 w-3" /> Maps</a>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
+        <aside className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl lg:max-h-[calc(100vh-6rem)] lg:overflow-hidden">
+          <SectionHeader icon={Search} title="Service Results" subtitle={`${visibleServices.length} matching service${visibleServices.length === 1 ? '' : 's'}`} />
+          <div className="p-3 lg:max-h-[calc(100vh-11rem)] lg:overflow-y-auto">
+            <ServiceList services={visibleServices} loading={servicesLoading} onView={selectService} emptyMessage={searchQuery ? 'No results found after search.' : 'No nearby results found for this filter.'} {...commonListProps} />
           </div>
         </aside>
       </section>
+
+      <section className="mt-8 rounded-3xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl md:p-6">
+        <SectionHeader icon={Heart} title="Favorite Services" subtitle={`${favoriteServices.length} saved for quick access`} />
+        <div className="mt-4"><ServiceList services={favoriteServices} layout="grid" onView={recordRecentlyViewed} emptyMessage="Save a service and it will remain available here after refresh." {...commonListProps} /></div>
+      </section>
+
+      <section className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl md:p-6">
+        <SectionHeader icon={History} title="Recently Viewed" subtitle="Your latest service card and marker selections" />
+        <div className="mt-4"><ServiceList services={recentServices} layout="grid" onView={recordRecentlyViewed} emptyMessage="Services you view will appear here." {...commonListProps} /></div>
+      </section>
     </main>
   );
+}
+
+function SectionHeader({ icon: Icon, title, subtitle }) {
+  return <div className="flex items-center gap-3 border-b border-white/10 p-4"><span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-500/10 text-blue-300"><Icon className="h-5 w-5" /></span><div><h2 className="font-semibold">{title}</h2><p className="text-xs text-slate-400">{subtitle}</p></div></div>;
 }
 
 function CoordinateCard({ label, value }) {

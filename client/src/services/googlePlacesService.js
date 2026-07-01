@@ -42,6 +42,12 @@ const normalizePlace = (place, category) => {
   const placeId = googlePlaceId || `${category.id}-${latitude}-${longitude}-${place.name}`;
   const query = encodeURIComponent(`${latitude},${longitude}`);
   const placeIdQuery = googlePlaceId ? `&query_place_id=${encodeURIComponent(googlePlaceId)}` : '';
+  let openNow = null;
+  if (typeof place.opening_hours?.isOpen === 'function') {
+    try { openNow = place.opening_hours.isOpen(); } catch { openNow = null; }
+  } else if (typeof place.opening_hours?.open_now === 'boolean') {
+    openNow = place.opening_hours.open_now;
+  }
   return {
     id: `${category.id}-${placeId}`,
     placeId,
@@ -54,8 +60,12 @@ const normalizePlace = (place, category) => {
     latitude,
     longitude,
     rating: typeof place.rating === 'number' ? place.rating : null,
+    totalReviews: Number.isFinite(place.user_ratings_total) ? place.user_ratings_total : null,
+    openNow,
+    phone: place.formatted_phone_number || place.international_phone_number || null,
     address: place.vicinity || place.formatted_address || 'Address unavailable',
-    googleMapsLink: `https://www.google.com/maps/search/?api=1&query=${query}${placeIdQuery}`
+    googleMapsLink: `https://www.google.com/maps/search/?api=1&query=${query}${placeIdQuery}`,
+    fetchedAt: Date.now()
   };
 };
 
