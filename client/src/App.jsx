@@ -11,6 +11,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import EmergencyContactsPage from './pages/EmergencyContactsPage';
 import SosHistoryPage from './pages/SosHistoryPage';
+import LiveLocationPage from './pages/LiveLocationPage';
 import { useAuth } from './context/AuthContext';
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
       <Route path="/settings" element={<ProtectedRoute allowGuest={false}><SettingsPage /></ProtectedRoute>} />
       <Route path="/emergency-contacts" element={<ProtectedRoute allowGuest={false}><EmergencyContactsPage /></ProtectedRoute>} />
       <Route path="/sos-history" element={<ProtectedRoute allowGuest={false}><SosHistoryPage /></ProtectedRoute>} />
+      <Route path="/live-location" element={<ProtectedRoute allowGuest={false}><LiveLocationPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to={user ? '/dashboard' : '/'} replace />} />
     </Routes>
   );

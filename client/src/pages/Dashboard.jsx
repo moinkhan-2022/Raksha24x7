@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { LifeBuoy, LocateFixed, MapPinned, PhoneCall, ShieldCheck, Users } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../context/AuthContext';
 import Toast from '../components/Toast';
 import sosService from '../services/sosService';
 import SOSCountdownModal from '../components/SOSCountdownModal';
+import locationService from '../services/locationService';
 
 const cards = [
   { icon: LifeBuoy, title: 'SOS', subtitle: 'Trigger immediate emergency alert' },
@@ -20,12 +22,14 @@ function CardSkeleton() { return <div className="h-28 animate-pulse rounded-2xl 
 
 function Dashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [toast, setToast] = useState('');
   const [latest, setLatest] = useState(null);
   const [total, setTotal] = useState(0);
   const [countOpen, setCountOpen] = useState(false);
   const [count, setCount] = useState(5);
   const [sending, setSending] = useState(false);
+  const [latestLocation, setLatestLocation] = useState(null);
   const timerRef = useRef(null);
 
   const loadLatest = async () => {
@@ -38,7 +42,15 @@ function Dashboard() {
     }
   };
 
-  useEffect(() => { loadLatest(); return () => clearInterval(timerRef.current); }, []);
+  useEffect(() => {
+    loadLatest();
+    if (!user?.isGuest) {
+      locationService.getLatestLocation()
+        .then(({ data }) => setLatestLocation(data.location || null))
+        .catch(() => {});
+    }
+    return () => clearInterval(timerRef.current);
+  }, [user?.isGuest]);
 
   const cancelCountdown = () => {
     clearInterval(timerRef.current);
@@ -110,20 +122,21 @@ function Dashboard() {
         <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
           <h1 className="text-2xl font-bold text-white">Welcome, {user?.name || 'User'}</h1>
           <p className="mt-2 text-slate-300">Stay Safe. Emergency help is always available.</p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5 text-sm">
             <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-slate-200">Total SOS Sent: <span className="font-semibold text-white">{total}</span></div>
             <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-slate-200">Last SOS: <span className="font-semibold text-white">{latest ? new Date(latest.createdAt).toLocaleString() : 'N/A'}</span></div>
             <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-slate-200">Last Location: <span className="font-semibold text-white">{latest ? `${latest.latitude.toFixed(4)}, ${latest.longitude.toFixed(4)}` : 'N/A'}</span></div>
             <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-slate-200">Emergency Status: <span className="font-semibold text-white">{sending ? 'Sending...' : 'Ready'}</span></div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-slate-200">Last Known Location: <span className="font-semibold text-white">{latestLocation ? `${latestLocation.latitude.toFixed(4)}, ${latestLocation.longitude.toFixed(4)}` : 'N/A'}</span></div>
           </div>
         </motion.section>
 
         <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {cards.map((c) => (
-            <motion.button key={c.title} whileHover={{ y: -4 }} className="w-full rounded-2xl border border-white/10 bg-white/5 p-5 text-left backdrop-blur-xl hover:bg-white/10">
+            <motion.button key={c.title} onClick={() => c.title === 'Live Location' && navigate('/live-location')} whileHover={{ y: -4 }} className="w-full rounded-2xl border border-white/10 bg-white/5 p-5 text-left backdrop-blur-xl hover:bg-white/10">
               <c.icon className="mb-3 h-6 w-6 text-blue-300" />
               <p className="font-semibold text-white">{c.title}</p>
-              <p className="mt-1 text-sm text-slate-300">{c.subtitle}</p>
+              <p className="mt-1 text-sm text-slate-300">{c.title === 'Live Location' && latestLocation ? `Last: ${latestLocation.latitude.toFixed(4)}, ${latestLocation.longitude.toFixed(4)}` : c.subtitle}</p>
             </motion.button>
           ))}
         </section>
