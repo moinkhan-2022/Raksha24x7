@@ -1,5 +1,9 @@
 import { NEARBY_SERVICES_RADIUS, SERVICE_CATEGORIES } from '../utils/serviceCategories.js';
 
+const CACHE_TTL_MS = 30 * 1000;
+const nearbyCache = new Map();
+const locationCacheKey = (location) => `${Number(location.lat).toFixed(3)},${Number(location.lng).toFixed(3)}`;
+
 const statusMessage = (status) => {
   if (status === 'REQUEST_DENIED') {
     return 'Google Places request denied. Confirm that Places API is enabled and the API key restrictions allow this site.';
@@ -69,10 +73,14 @@ const normalizePlace = (place, category) => {
   };
 };
 
-export const getNearbyEmergencyServices = async (map, location) => {
+export const getNearbyEmergencyServices = async (map, location, { force = false } = {}) => {
   if (!map || !window.google?.maps?.places) {
     throw new Error('Google Places library is unavailable. Confirm that Places API is enabled.');
   }
+
+  const key = locationCacheKey(location);
+  const cached = nearbyCache.get(key);
+  if (!force && cached && Date.now() - cached.timestamp < CACHE_TTL_MS) return cached.data;
 
   const placesService = new window.google.maps.places.PlacesService(map);
   const searches = SERVICE_CATEGORIES.map(async (category) => {
@@ -98,10 +106,14 @@ export const getNearbyEmergencyServices = async (map, location) => {
     return true;
   });
 
-  return {
+  const data = {
     services,
     warnings: [...new Set(failures.map((result) => result.reason?.message).filter(Boolean))]
   };
+  nearbyCache.set(key, { timestamp: Date.now(), data });
+  return data;
 };
 
-export default { getNearbyEmergencyServices };
+export const clearNearbyServicesCache = () => nearbyCache.clear();
+
+export default { getNearbyEmergencyServices, clearNearbyServicesCache };

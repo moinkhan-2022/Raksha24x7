@@ -41,7 +41,7 @@ const copyText = async (text) => {
   if (!copied) throw new Error('Clipboard copy failed');
 };
 
-function ServiceCard({ service, isFavorite, selected, onToggleFavorite, onView, onNotify }) {
+function ServiceCard({ service, isFavorite, selected, emergency, etaLabel, onToggleFavorite, onView, onNavigate, onNotify }) {
   const Icon = CATEGORY_ICONS[service.categoryId] || MapPin;
   const phone = String(service.phone || '').replace(/[^\d+]/g, '');
   const hasOrigin = Number.isFinite(service.userLatitude) && Number.isFinite(service.userLongitude);
@@ -88,8 +88,9 @@ function ServiceCard({ service, isFavorite, selected, onToggleFavorite, onView, 
       layout
       whileHover={{ y: -3 }}
       onClick={recordView}
-      className={`rounded-2xl border bg-slate-950/45 p-4 shadow-lg backdrop-blur-xl transition ${selected ? 'border-blue-400/60 shadow-blue-950/50' : 'border-white/10 hover:border-white/20'}`}
+      className={`rounded-2xl border bg-slate-950/45 p-4 shadow-lg backdrop-blur-xl transition ${emergency ? 'border-amber-300/60 shadow-amber-950/40' : selected ? 'border-blue-400/60 shadow-blue-950/50' : 'border-white/10 hover:border-white/20'}`}
     >
+      {emergency && <div className="mb-3 inline-flex rounded-full bg-amber-400/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-200">Nearest emergency service</div>}
       <div className="flex items-start gap-3">
         <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl" style={{ backgroundColor: `${service.color}25`, color: service.color }}>
           <Icon className="h-5 w-5" />
@@ -111,7 +112,7 @@ function ServiceCard({ service, isFavorite, selected, onToggleFavorite, onView, 
 
       <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-slate-400">{service.address}</p>
       <div className="mt-3 flex flex-wrap gap-2 text-xs">
-        <span className="rounded-full bg-blue-500/10 px-2.5 py-1 text-blue-200">{service.distanceLabel}</span>
+        <span className="rounded-full bg-blue-500/10 px-2.5 py-1 text-blue-200">{service.distanceLabel}{etaLabel ? ` • ${etaLabel}` : ''}</span>
         <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-1 text-amber-200"><Star className="h-3 w-3 fill-current" />{service.rating == null ? 'No rating' : service.rating.toFixed(1)}{service.totalReviews != null ? ` (${service.totalReviews})` : ''}</span>
         <OpenStatus openNow={service.openNow} />
       </div>
@@ -119,7 +120,7 @@ function ServiceCard({ service, isFavorite, selected, onToggleFavorite, onView, 
       <p className="mt-3 text-xs text-slate-400">{service.phone || 'Phone number not available'}</p>
 
       <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-        <a href={directionsLink} target="_blank" rel="noreferrer" onClick={(event) => handleAction(event)} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-2 py-2 font-semibold text-white hover:bg-blue-500"><Navigation className="h-3.5 w-3.5" /> Navigate</a>
+        <a href={directionsLink} target="_blank" rel="noreferrer" onClick={(event) => handleAction(event, () => onNavigate?.(service))} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-2 py-2 font-semibold text-white hover:bg-blue-500"><Navigation className="h-3.5 w-3.5" /> Navigate</a>
         {phone ? (
           <a href={`tel:${phone}`} onClick={(event) => handleAction(event)} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-2 py-2 font-semibold text-white hover:bg-emerald-500"><Phone className="h-3.5 w-3.5" /> Call</a>
         ) : (

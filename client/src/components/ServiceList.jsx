@@ -9,7 +9,10 @@ function ServiceList({
   selectedServiceId,
   onToggleFavorite,
   onView,
+  onNavigate,
   onNotify,
+  emergencyServiceIds = new Set(),
+  etaForService,
   layout = 'list',
   emptyMessage = 'No services match your search.'
 }) {
@@ -31,8 +34,11 @@ function ServiceList({
           service={service}
           isFavorite={favoriteIds.has(service.placeId)}
           selected={selectedServiceId === service.id}
+          emergency={emergencyServiceIds.has(service.placeId)}
+          etaLabel={etaForService?.(service)}
           onToggleFavorite={onToggleFavorite}
           onView={onView}
+          onNavigate={onNavigate}
           onNotify={onNotify}
         />
       ))}

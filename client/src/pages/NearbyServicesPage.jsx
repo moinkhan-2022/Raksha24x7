@@ -1,14 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useJsApiLoader } from '@react-google-maps/api';
-import { AlertTriangle, Heart, History, MapPin, RefreshCw, Search } from 'lucide-react';
+import { AlertTriangle, ExternalLink, Heart, History, MapPin, RefreshCw, Route, Search } from 'lucide-react';
+import AQIWidget from '../components/AQIWidget';
+import EmergencyPanel from '../components/EmergencyPanel';
 import Navbar from '../components/Navbar';
 import NearbyFilterBar from '../components/NearbyFilterBar';
 import NearbyMap from '../components/NearbyMap';
 import NearbySearchBar from '../components/NearbySearchBar';
+import RouteInfo from '../components/RouteInfo';
 import ServiceList from '../components/ServiceList';
 import Toast from '../components/Toast';
+import WeatherWidget from '../components/WeatherWidget';
+import useEmergencyMode from '../hooks/useEmergencyMode';
+import useRouteNavigation from '../hooks/useRouteNavigation';
+import { getEnvironmentData } from '../services/environmentService';
 import { getNearbyEmergencyServices } from '../services/googlePlacesService';
-import { getServiceDistance } from '../utils/distance';
+import { buildGoogleMapsNavigationUrl, getRecentRoutes, saveRecentRoute } from '../services/navigationService';
+import { calculateDistanceMeters, getServiceDistance } from '../utils/distance';
+import { estimateEtaMinutes, formatEta } from '../utils/etaCalculator';
 import { GOOGLE_MAP_LIBRARIES, GOOGLE_MAP_LOADER_ID } from '../utils/googleMapConfig';
 import {
   addRecentlyViewedService,
@@ -20,6 +29,7 @@ import {
 import { filterServicesByQuery, sortServices } from '../utils/serviceResults';
 
 const GEOLOCATION_OPTIONS = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
+const EMPTY_SERVICE_IDS = new Set();
 
 const locationErrorMessage = (error) => {
   if (error?.code === 1) return 'Location permission denied. Enable location access in your browser settings.';
@@ -34,6 +44,19 @@ const enrichWithDistance = (service, userLocation) => ({
   userLatitude: userLocation?.latitude,
   userLongitude: userLocation?.longitude
 });
+
+const copyText = async (text) => {
+  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand('copy');
+  textarea.remove();
+  if (!copied) throw new Error('Clipboard copy failed');
+};
 
 function NearbyServicesPage() {
   const apiKey = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
@@ -53,6 +76,7 @@ function NearbyServicesPage() {
 
 function NearbyServicesExperience({ apiKey }) {
   const [userLocation, setUserLocation] = useState(null);
+  const [serviceSearchLocation, setServiceSearchLocation] = useState(null);
   const [mapInstance, setMapInstance] = useState(null);
   const [services, setServices] = useState([]);
   const [favorites, setFavorites] = useState(() => getFavoriteServices());
@@ -67,9 +91,21 @@ function NearbyServicesExperience({ apiKey }) {
   const [servicesError, setServicesError] = useState('');
   const [searchWarnings, setSearchWarnings] = useState([]);
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const [trafficEnabled, setTrafficEnabled] = useState(true);
+  const [environment, setEnvironment] = useState({ weather: null, airQuality: null });
+  const [environmentLoading, setEnvironmentLoading] = useState(false);
+  const [environmentError, setEnvironmentError] = useState('');
+  const [recentRoutes, setRecentRoutes] = useState(() => getRecentRoutes());
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
   const [toast, setToast] = useState({ message: '', type: 'success' });
   const mountedRef = useRef(true);
   const searchIdRef = useRef(0);
+  const liveLocationRef = useRef(null);
+  const serviceSearchLocationRef = useRef(null);
+  const locationDebounceRef = useRef(null);
+  const lastLocationToastRef = useRef(0);
+  const forceRefreshRef = useRef(false);
+  const emergencyNotifiedRef = useRef(new Set());
 
   const { isLoaded, loadError } = useJsApiLoader({
     id: GOOGLE_MAP_LOADER_ID,
@@ -85,6 +121,49 @@ function NearbyServicesExperience({ apiKey }) {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  useEffect(() => {
+    const updateNetworkStatus = () => setIsOnline(navigator.onLine);
+    window.addEventListener('online', updateNetworkStatus);
+    window.addEventListener('offline', updateNetworkStatus);
+    return () => {
+      window.removeEventListener('online', updateNetworkStatus);
+      window.removeEventListener('offline', updateNetworkStatus);
+    };
+  }, []);
+
+  const applyPosition = useCallback((position, { forceSearch = false, notify = true } = {}) => {
+    if (!mountedRef.current) return;
+    const next = {
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      accuracy: position.coords.accuracy,
+      timestamp: new Date(position.timestamp || Date.now()).toISOString()
+    };
+    const previous = liveLocationRef.current;
+    liveLocationRef.current = next;
+    setUserLocation(next);
+    setLocationError('');
+    setLocationLoading(false);
+
+    const movedFromPrevious = previous ? calculateDistanceMeters(previous, next) : null;
+    if (notify && Number.isFinite(movedFromPrevious) && movedFromPrevious >= 15 && Date.now() - lastLocationToastRef.current > 10000) {
+      lastLocationToastRef.current = Date.now();
+      showToast('Live location updated');
+    }
+
+    const movedFromSearch = serviceSearchLocationRef.current
+      ? calculateDistanceMeters(serviceSearchLocationRef.current, next)
+      : Infinity;
+    if (forceSearch || movedFromSearch >= 50) {
+      window.clearTimeout(locationDebounceRef.current);
+      locationDebounceRef.current = window.setTimeout(() => {
+        if (movedFromSearch >= 50) forceRefreshRef.current = true;
+        serviceSearchLocationRef.current = next;
+        setServiceSearchLocation(next);
+      }, forceSearch ? 0 : 1200);
+    }
+  }, [showToast]);
+
   const requestCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) {
       setLocationError('Geolocation is not supported by this browser.');
@@ -96,15 +175,9 @@ function NearbyServicesExperience({ apiKey }) {
     setLocationError('');
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        if (!mountedRef.current) return;
-        setUserLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          timestamp: new Date(position.timestamp || Date.now()).toISOString()
-        });
+        forceRefreshRef.current = true;
+        applyPosition(position, { forceSearch: true, notify: false });
         setRefreshVersion((version) => version + 1);
-        setLocationLoading(false);
       },
       (error) => {
         if (!mountedRef.current) return;
@@ -113,7 +186,7 @@ function NearbyServicesExperience({ apiKey }) {
       },
       GEOLOCATION_OPTIONS
     );
-  }, []);
+  }, [applyPosition]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -121,22 +194,49 @@ function NearbyServicesExperience({ apiKey }) {
     return () => {
       mountedRef.current = false;
       searchIdRef.current += 1;
+      window.clearTimeout(locationDebounceRef.current);
     };
   }, [requestCurrentLocation]);
 
   useEffect(() => {
-    if (!isLoaded || !mapInstance || !userLocation) return undefined;
+    if (!navigator.geolocation) return undefined;
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => applyPosition(position),
+      (error) => {
+        if (mountedRef.current) setLocationError(locationErrorMessage(error));
+      },
+      { ...GEOLOCATION_OPTIONS, maximumAge: 5000, timeout: 20000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [applyPosition]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      forceRefreshRef.current = true;
+      setRefreshVersion((version) => version + 1);
+    }, 30000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!isLoaded || !mapInstance || !serviceSearchLocation) return undefined;
+    if (!isOnline) {
+      setServicesError('No Internet connection. Nearby services will refresh when you reconnect.');
+      return undefined;
+    }
 
     const searchId = ++searchIdRef.current;
+    const force = forceRefreshRef.current;
+    forceRefreshRef.current = false;
     setServicesLoading(true);
     setServicesError('');
     setSearchWarnings([]);
     setSelectedService(null);
 
     getNearbyEmergencyServices(mapInstance, {
-      lat: userLocation.latitude,
-      lng: userLocation.longitude
-    })
+      lat: serviceSearchLocation.latitude,
+      lng: serviceSearchLocation.longitude
+    }, { force })
       .then(({ services: nearbyServices, warnings }) => {
         if (!mountedRef.current || searchId !== searchIdRef.current) return;
         setServices(nearbyServices);
@@ -152,7 +252,28 @@ function NearbyServicesExperience({ apiKey }) {
       });
 
     return () => { searchIdRef.current += 1; };
-  }, [isLoaded, mapInstance, refreshVersion, userLocation]);
+  }, [isLoaded, isOnline, mapInstance, refreshVersion, serviceSearchLocation]);
+
+  useEffect(() => {
+    if (!serviceSearchLocation || !isOnline) return undefined;
+    const controller = new AbortController();
+    setEnvironmentLoading(true);
+    setEnvironmentError('');
+    getEnvironmentData(serviceSearchLocation.latitude, serviceSearchLocation.longitude, { signal: controller.signal })
+      .then((data) => {
+        if (!controller.signal.aborted) {
+          setEnvironment({ weather: data.weather, airQuality: data.airQuality });
+          if (data.warnings.length) setEnvironmentError(data.warnings.join(' '));
+        }
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setEnvironmentError(error.message || 'Environmental information is unavailable.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setEnvironmentLoading(false);
+      });
+    return () => controller.abort();
+  }, [isOnline, serviceSearchLocation]);
 
   const nearbyWithDistance = useMemo(
     () => services.map((service) => enrichWithDistance(service, userLocation)),
@@ -170,6 +291,14 @@ function NearbyServicesExperience({ apiKey }) {
   );
 
   const favoriteIds = useMemo(() => new Set(favorites.map((service) => service.placeId)), [favorites]);
+  const emergencyMode = useEmergencyMode(nearbyWithDistance);
+  const currentSelectedService = useMemo(() => {
+    if (!selectedService) return null;
+    return nearbyWithDistance.find((service) => service.placeId === selectedService.placeId)
+      || favoriteServices.find((service) => service.placeId === selectedService.placeId)
+      || selectedService;
+  }, [favoriteServices, nearbyWithDistance, selectedService]);
+  const routeNavigation = useRouteNavigation(userLocation, currentSelectedService);
 
   const visibleServices = useMemo(() => {
     const categoryServices = activeFilter === 'favorites'
@@ -178,8 +307,11 @@ function NearbyServicesExperience({ apiKey }) {
         ? nearbyWithDistance
         : nearbyWithDistance.filter((service) => service.filterId === activeFilter);
     const searched = filterServicesByQuery(categoryServices, searchQuery);
-    return sortServices(searched, sortBy);
-  }, [activeFilter, favoriteServices, nearbyWithDistance, searchQuery, sortBy]);
+    const sorted = sortServices(searched, sortBy);
+    if (!emergencyMode.enabled || activeFilter !== 'all') return sorted;
+    const priority = emergencyMode.priorityServices;
+    return [...priority, ...sorted.filter((service) => !emergencyMode.priorityIds.has(service.placeId))];
+  }, [activeFilter, emergencyMode.enabled, emergencyMode.priorityIds, emergencyMode.priorityServices, favoriteServices, nearbyWithDistance, searchQuery, sortBy]);
 
   const filterCounts = useMemo(() => nearbyWithDistance.reduce((counts, service) => ({
     ...counts,
@@ -187,6 +319,34 @@ function NearbyServicesExperience({ apiKey }) {
     favorites: favorites.length,
     [service.filterId]: (counts[service.filterId] || 0) + 1
   }), { favorites: favorites.length }), [favorites.length, nearbyWithDistance]);
+
+  useEffect(() => {
+    if (!emergencyMode.enabled) {
+      emergencyNotifiedRef.current.clear();
+      return;
+    }
+    setActiveFilter('all');
+    setSearchQuery('');
+    setSortBy('nearest');
+    if (!emergencyNotifiedRef.current.has('active')) {
+      emergencyNotifiedRef.current.add('active');
+      showToast('Emergency mode activated');
+    }
+  }, [emergencyMode.enabled, showToast]);
+
+  useEffect(() => {
+    if (!emergencyMode.enabled) return undefined;
+    const timers = [];
+    if (emergencyMode.nearestByCategory.hospital && !emergencyNotifiedRef.current.has('hospital')) {
+      emergencyNotifiedRef.current.add('hospital');
+      timers.push(window.setTimeout(() => showToast('Nearest hospital found'), 900));
+    }
+    if (emergencyMode.nearestByCategory.police && !emergencyNotifiedRef.current.has('police')) {
+      emergencyNotifiedRef.current.add('police');
+      timers.push(window.setTimeout(() => showToast('Nearest police station found'), 1800));
+    }
+    return () => timers.forEach(window.clearTimeout);
+  }, [emergencyMode.enabled, emergencyMode.nearestByCategory.hospital, emergencyMode.nearestByCategory.police, showToast]);
 
   useEffect(() => {
     if (selectedService && !visibleServices.some((service) => service.placeId === selectedService.placeId)) {
@@ -223,10 +383,73 @@ function NearbyServicesExperience({ apiKey }) {
     }
   }, [showToast]);
 
+  useEffect(() => {
+    if (routeNavigation.routeInfo) setRecentRoutes(getRecentRoutes());
+  }, [routeNavigation.routeInfo]);
+
+  const etaForService = useCallback(
+    (service) => formatEta(estimateEtaMinutes(service.distanceMeters, 'DRIVING')),
+    []
+  );
+
+  const recordNavigation = useCallback((service) => {
+    if (!service) return;
+    const exactRoute = currentSelectedService?.placeId === service.placeId ? routeNavigation.routeInfo : null;
+    try {
+      const next = saveRecentRoute({
+        placeId: service.placeId,
+        name: service.name,
+        category: service.categoryLabel,
+        latitude: service.latitude,
+        longitude: service.longitude,
+        travelMode: routeNavigation.travelMode,
+        distanceText: exactRoute?.distanceText || service.distanceLabel,
+        distanceMeters: exactRoute?.distanceMeters || service.distanceMeters,
+        durationText: exactRoute?.durationText || etaForService(service),
+        durationSeconds: exactRoute?.durationSeconds || null
+      });
+      setRecentRoutes(next);
+    } catch {
+      showToast('Navigation history could not be saved', 'error');
+    }
+  }, [currentSelectedService?.placeId, etaForService, routeNavigation.routeInfo, routeNavigation.travelMode, showToast]);
+
+  const navigateToService = useCallback((service) => {
+    if (!service) return;
+    selectService(service);
+    recordNavigation(service);
+    const url = buildGoogleMapsNavigationUrl(userLocation, service, routeNavigation.travelMode);
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }, [recordNavigation, routeNavigation.travelMode, selectService, userLocation]);
+
+  const shareCurrentLocation = useCallback(async () => {
+    if (!userLocation) {
+      showToast('Current location is unavailable', 'error');
+      return;
+    }
+    const url = `https://maps.google.com/?q=${userLocation.latitude},${userLocation.longitude}`;
+    const text = `Raksha24x7 Emergency Location\n${url}`;
+    try {
+      if (navigator.share) await navigator.share({ title: 'Raksha24x7 Emergency Location', text, url });
+      else await copyText(text);
+      showToast(navigator.share ? 'Location shared' : 'Location copied to clipboard');
+    } catch (error) {
+      if (error?.name !== 'AbortError') showToast('Location could not be shared', 'error');
+    }
+  }, [showToast, userLocation]);
+
+  const selectedNavigationUrl = useMemo(
+    () => currentSelectedService ? buildGoogleMapsNavigationUrl(userLocation, currentSelectedService, routeNavigation.travelMode) : '',
+    [currentSelectedService, routeNavigation.travelMode, userLocation]
+  );
+
   const commonListProps = {
     favoriteIds,
-    selectedServiceId: selectedService?.id,
+    selectedServiceId: currentSelectedService?.id,
     onToggleFavorite: toggleFavorite,
+    onNavigate: recordNavigation,
+    emergencyServiceIds: emergencyMode.enabled ? emergencyMode.priorityIds : EMPTY_SERVICE_IDS,
+    etaForService,
     onNotify: showToast
   };
 
@@ -258,22 +481,42 @@ function NearbyServicesExperience({ apiKey }) {
           <CoordinateCard label="Visible Results" value={servicesLoading ? 'Loading...' : String(visibleServices.length)} />
         </div>
 
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <WeatherWidget weather={environment.weather} loading={environmentLoading} />
+          <AQIWidget airQuality={environment.airQuality} loading={environmentLoading} />
+        </div>
+
         <div className="mt-5"><NearbyFilterBar activeFilter={activeFilter} counts={filterCounts} onFilterChange={setActiveFilter} disabled={servicesLoading} /></div>
         <div className="mt-4"><NearbySearchBar query={searchQuery} onSearchChange={setSearchQuery} sortBy={sortBy} onSortChange={setSortBy} resultCount={visibleServices.length} /></div>
       </section>
 
       {locationError && <InlineAlert message={locationError} />}
       {servicesError && <InlineAlert message={servicesError} />}
+      {environmentError && <InlineAlert message={environmentError} warning />}
       {searchWarnings.length > 0 && <InlineAlert message={`Some service categories could not be loaded: ${searchWarnings.join(' ')}`} warning />}
 
       <section className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_430px]">
         <div className="relative h-[58vh] min-h-[460px] overflow-hidden rounded-3xl border border-white/10 bg-slate-950 shadow-2xl shadow-blue-950/40 lg:sticky lg:top-20 lg:h-[calc(100vh-6rem)] lg:min-h-[590px]">
           {userLocation ? (
-            <NearbyMap userLocation={userLocation} services={visibleServices} selectedService={selectedService} onSelectService={selectService} onMapLoad={setMapInstance} onMapUnmount={() => setMapInstance(null)} />
+            <NearbyMap
+              userLocation={userLocation}
+              services={visibleServices}
+              selectedService={currentSelectedService}
+              onSelectService={selectService}
+              onMapLoad={setMapInstance}
+              onMapUnmount={() => setMapInstance(null)}
+              directions={routeNavigation.directions}
+              trafficEnabled={trafficEnabled}
+              onTrafficToggle={() => setTrafficEnabled((enabled) => !enabled)}
+              emergencyServiceIds={emergencyMode.enabled ? emergencyMode.priorityIds : null}
+              onNotify={showToast}
+            />
           ) : (
             <div className="grid h-full place-items-center p-6 text-center"><div><MapPin className="mx-auto h-10 w-10 text-blue-300" /><p className="mt-4 font-semibold">{locationLoading ? 'Getting your current location...' : 'Location is required to search nearby services.'}</p><p className="mt-2 text-sm text-slate-400">Allow location access, then use Refresh.</p></div></div>
           )}
           {servicesLoading && userLocation && <div className="absolute inset-x-3 top-3 flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-slate-950/90 px-4 py-3 text-sm shadow-xl backdrop-blur-xl md:left-1/2 md:right-auto md:-translate-x-1/2"><RefreshCw className="h-4 w-4 animate-spin text-blue-300" /> Loading nearby services...</div>}
+          {userLocation && <EmergencyPanel active={emergencyMode.enabled} onToggle={emergencyMode.toggle} nearestByCategory={emergencyMode.nearestByCategory} onSelect={selectService} onNavigate={navigateToService} onShareLocation={shareCurrentLocation} />}
+          {userLocation && <RouteInfo service={currentSelectedService} travelMode={routeNavigation.travelMode} onModeChange={routeNavigation.setTravelMode} routeInfo={routeNavigation.routeInfo} loading={routeNavigation.loading} error={routeNavigation.error} onClear={() => { setSelectedService(null); routeNavigation.clearRoute(); }} onNavigate={() => recordNavigation(currentSelectedService)} navigationUrl={selectedNavigationUrl} />}
         </div>
 
         <aside className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl lg:max-h-[calc(100vh-6rem)] lg:overflow-hidden">
@@ -292,6 +535,21 @@ function NearbyServicesExperience({ apiKey }) {
       <section className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl md:p-6">
         <SectionHeader icon={History} title="Recently Viewed" subtitle="Your latest service card and marker selections" />
         <div className="mt-4"><ServiceList services={recentServices} layout="grid" onView={recordRecentlyViewed} emptyMessage="Services you view will appear here." {...commonListProps} /></div>
+      </section>
+
+      <section className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl md:p-6">
+        <SectionHeader icon={Route} title="Recent Routes & Navigation" subtitle="Visited emergency destinations stored on this device" />
+        {recentRoutes.length ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {recentRoutes.map((route) => (
+              <a key={`${route.key}-${route.navigatedAt}`} href={buildGoogleMapsNavigationUrl(userLocation, route, route.travelMode)} target="_blank" rel="noreferrer" className="rounded-2xl border border-white/10 bg-slate-950/35 p-4 transition hover:border-blue-400/40 hover:bg-white/10">
+                <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-semibold text-white">{route.name}</p><p className="mt-1 text-xs uppercase tracking-wider text-blue-300">{route.category} • {route.travelMode?.toLowerCase()}</p></div><ExternalLink className="h-4 w-4 shrink-0 text-slate-400" /></div>
+                <div className="mt-3 flex gap-3 text-xs text-slate-300"><span>{route.distanceText || 'Distance unavailable'}</span><span>{route.durationText || 'ETA unavailable'}</span></div>
+                <p className="mt-2 text-[10px] text-slate-500">{new Date(route.navigatedAt).toLocaleString()}</p>
+              </a>
+            ))}
+          </div>
+        ) : <div className="mt-4 rounded-2xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-400">Routes you calculate or open will appear here.</div>}
       </section>
     </main>
   );
