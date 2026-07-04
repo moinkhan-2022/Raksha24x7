@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 const SESSION_KEY = 'raksha_emergency_mode';
-export const EMERGENCY_CATEGORY_ORDER = ['hospital', 'police', 'fire', 'pharmacy', 'ambulance', 'blood_bank', 'women_police'];
+export const EMERGENCY_CATEGORY_ORDER = ['hospital', 'police', 'fire', 'pharmacy', 'ambulance', 'blood_bank', 'women_safety', 'shelter', 'clinic', 'doctors', 'emergency_phone'];
 
 export const getNearestEmergencyServices = (services) => {
   const result = {};

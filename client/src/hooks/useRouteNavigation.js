@@ -38,7 +38,8 @@ function useRouteNavigation(origin, destination) {
         .then((result) => {
           if (requestId !== requestIdRef.current) return;
           const summary = routeSummary(result);
-          setDirections(result);
+          // Navigation opens externally; the in-app map displays only an estimate.
+          setDirections(null);
           setRouteInfo(summary);
           if (summary) {
             try {

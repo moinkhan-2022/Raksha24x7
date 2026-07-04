@@ -2,7 +2,8 @@ export const GOOGLE_MAP_LOADER_ID = 'raksha24x7-google-maps-script';
 
 // Keep this array stable and shared by every map page. Google Maps rejects
 // attempts to reload the same script with different library options.
-export const GOOGLE_MAP_LIBRARIES = ['places'];
+// Nearby search is provided by OpenStreetMap Overpass; no paid Google library is loaded.
+export const GOOGLE_MAP_LIBRARIES = [];
 
 export const DARK_MAP_STYLES = [
   { elementType: 'geometry', stylers: [{ color: '#0f172a' }] },

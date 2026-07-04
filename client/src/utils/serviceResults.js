@@ -7,12 +7,21 @@ export const filterServicesByQuery = (services, searchQuery) => {
     service.categoryId,
     service.filterId,
     service.address,
-    service.phone
+    service.phone,
+    service.city,
+    service.state,
+    service.country,
+    service.postalCode,
+    service.website,
+    service.openingHours
   ].some((value) => String(value || '').toLowerCase().includes(query)));
 };
 
 export const sortServices = (services, sortBy) => [...services].sort((first, second) => {
-  if (sortBy === 'rating') return (second.rating ?? -1) - (first.rating ?? -1);
+  if (sortBy === 'rating') {
+    const rating = (service) => Number.isFinite(Number(service.rating)) ? Number(service.rating) : -1;
+    return rating(second) - rating(first);
+  }
   if (sortBy === 'open') {
     const openDifference = Number(second.openNow === true) - Number(first.openNow === true);
     return openDifference || (first.distanceMeters ?? Infinity) - (second.distanceMeters ?? Infinity);

@@ -8,13 +8,16 @@ import {
   Heart,
   HeartHandshake,
   Hospital,
+  House,
   MapPin,
   Navigation,
   Phone,
   Pill,
   Share2,
   Shield,
-  Star
+  Star,
+  Stethoscope,
+  UserRound
 } from 'lucide-react';
 
 const CATEGORY_ICONS = {
@@ -25,7 +28,12 @@ const CATEGORY_ICONS = {
   ambulance: Ambulance,
   blood_bank: Droplets,
   women_police: HeartHandshake,
-  women_help: HeartHandshake
+  women_help: HeartHandshake,
+  women_safety: HeartHandshake,
+  shelter: House,
+  clinic: Stethoscope,
+  doctors: UserRound,
+  emergency_phone: Phone
 };
 
 const copyText = async (text) => {
@@ -43,10 +51,12 @@ const copyText = async (text) => {
 
 function ServiceCard({ service, isFavorite, selected, emergency, etaLabel, onToggleFavorite, onView, onNavigate, onNotify }) {
   const Icon = CATEGORY_ICONS[service.categoryId] || MapPin;
-  const phone = String(service.phone || '').replace(/[^\d+]/g, '');
-  const hasOrigin = Number.isFinite(service.userLatitude) && Number.isFinite(service.userLongitude);
-  const origin = hasOrigin ? `&origin=${service.userLatitude},${service.userLongitude}` : '';
-  const directionsLink = `https://www.google.com/maps/dir/?api=1${origin}&destination=${service.latitude},${service.longitude}&travelmode=driving`;
+  const phone = service.phone !== 'N/A' ? String(service.phone || '').replace(/[^\d+]/g, '') : '';
+  const directionsLink = `https://www.google.com/maps/dir/?api=1&destination=${service.latitude},${service.longitude}&travelmode=driving`;
+  const numericRating = Number(service.rating);
+  const hasRating = Number.isFinite(numericRating);
+  const hasReviews = Number.isFinite(Number(service.totalReviews));
+  const website = service.website && service.website !== 'N/A' ? service.website : '';
 
   const recordView = () => onView?.(service);
   const handleAction = (event, callback) => {
@@ -77,7 +87,7 @@ function ServiceCard({ service, isFavorite, selected, emergency, etaLabel, onTog
     recordView();
     try {
       await copyText(service.address);
-      onNotify('Address copied');
+      onNotify('Address copied successfully.');
     } catch {
       onNotify('Clipboard failure: address could not be copied', 'error');
     }
@@ -113,11 +123,12 @@ function ServiceCard({ service, isFavorite, selected, emergency, etaLabel, onTog
       <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-slate-400">{service.address}</p>
       <div className="mt-3 flex flex-wrap gap-2 text-xs">
         <span className="rounded-full bg-blue-500/10 px-2.5 py-1 text-blue-200">{service.distanceLabel}{etaLabel ? ` • ${etaLabel}` : ''}</span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-1 text-amber-200"><Star className="h-3 w-3 fill-current" />{service.rating == null ? 'No rating' : service.rating.toFixed(1)}{service.totalReviews != null ? ` (${service.totalReviews})` : ''}</span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-1 text-amber-200"><Star className="h-3 w-3 fill-current" />{hasRating ? numericRating.toFixed(1) : 'N/A'}{hasReviews ? ` (${service.totalReviews})` : ''}</span>
         <OpenStatus openNow={service.openNow} />
       </div>
 
-      <p className="mt-3 text-xs text-slate-400">{service.phone || 'Phone number not available'}</p>
+      <p className="mt-3 text-xs text-slate-400">{phone ? service.phone : 'Phone number not available'}{service.openingHours && service.openingHours !== 'N/A' ? ` · ${service.openingHours}` : ''}</p>
+      {website ? <a href={website} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="mt-2 block truncate text-xs text-blue-300 underline decoration-blue-400/40 underline-offset-2">{website}</a> : <p className="mt-2 text-xs text-slate-500">Website: N/A</p>}
 
       <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
         <a href={directionsLink} target="_blank" rel="noreferrer" onClick={(event) => handleAction(event, () => onNavigate?.(service))} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-2 py-2 font-semibold text-white hover:bg-blue-500"><Navigation className="h-3.5 w-3.5" /> Navigate</a>

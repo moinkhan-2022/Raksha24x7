@@ -9,35 +9,28 @@ const coordinates = (value) => ({
 });
 
 export const buildGoogleMapsNavigationUrl = (origin, destination, travelMode = 'DRIVING') => {
-  const from = coordinates(origin);
   const to = coordinates(destination);
-  const originQuery = Number.isFinite(from.lat) && Number.isFinite(from.lng) ? `&origin=${from.lat},${from.lng}` : '';
   const normalizedMode = travelMode || 'DRIVING';
   const mode = normalizedMode === 'BICYCLING' ? 'bicycling' : normalizedMode.toLowerCase();
-  return `https://www.google.com/maps/dir/?api=1${originQuery}&destination=${to.lat},${to.lng}&travelmode=${mode}`;
+  // Google Maps uses the device's current location when origin is omitted.
+  return `https://www.google.com/maps/dir/?api=1&destination=${to.lat},${to.lng}&travelmode=${mode}`;
 };
 
-export const requestDirections = (origin, destination, travelMode = 'DRIVING') => new Promise((resolve, reject) => {
-  if (!window.google?.maps?.DirectionsService) {
-    reject(new Error('Google Directions is unavailable. Check the Maps API configuration.'));
-    return;
-  }
-
-  const from = coordinates(origin);
-  const to = coordinates(destination);
-  const mode = window.google.maps.TravelMode?.[travelMode] || travelMode;
-  const service = new window.google.maps.DirectionsService();
-  service.route(
-    { origin: from, destination: to, travelMode: mode, provideRouteAlternatives: false },
-    (result, status) => {
-      if (status === 'OK' && result?.routes?.[0]?.legs?.[0]) resolve(result);
-      else if (status === 'ZERO_RESULTS') reject(new Error(`No ${travelMode.toLowerCase()} route is available for this destination.`));
-      else reject(new Error(`Google route request failed (${status || 'unknown error'}).`));
-    }
-  );
-});
+export const requestDirections = async (origin, destination, travelMode = 'DRIVING') => {
+  const distanceMeters = calculateDistanceMeters(origin, destination);
+  if (!Number.isFinite(distanceMeters)) throw new Error('Route coordinates are unavailable.');
+  const etaMinutes = estimateEtaMinutes(distanceMeters, travelMode);
+  return {
+    distanceText: formatDistance(distanceMeters),
+    distanceMeters,
+    durationText: formatEta(etaMinutes),
+    durationSeconds: Number.isFinite(etaMinutes) ? etaMinutes * 60 : null,
+    estimated: true
+  };
+};
 
 export const routeSummary = (directions) => {
+  if (directions?.estimated) return directions;
   const leg = directions?.routes?.[0]?.legs?.[0];
   if (!leg) return null;
   return {
@@ -72,3 +65,5 @@ export const saveRecentRoute = (route) => {
 };
 
 export default { buildGoogleMapsNavigationUrl, requestDirections, routeSummary, getRecentRoutes, saveRecentRoute };
+import { calculateDistanceMeters, formatDistance } from '../utils/distance';
+import { estimateEtaMinutes, formatEta } from '../utils/etaCalculator';

@@ -1,6 +1,6 @@
 const FAVORITES_KEY = 'raksha_nearby_favorites';
 const RECENT_KEY = 'raksha_nearby_recent';
-const RECENT_LIMIT = 8;
+const RECENT_LIMIT = 30;
 
 const storageAvailable = () => typeof window !== 'undefined' && Boolean(window.localStorage);
 
@@ -20,21 +20,31 @@ const writeItems = (key, items) => {
 };
 
 const toStoredService = (service) => ({
+  id: service.id || service.placeId,
+  osmId: service.osmId || 'N/A',
   placeId: service.placeId,
   name: service.name,
   category: service.categoryLabel || service.category || 'Emergency Service',
-  address: service.address || 'Address unavailable',
+  address: service.address || 'N/A',
+  city: service.city || 'N/A',
+  state: service.state || 'N/A',
+  country: service.country || 'N/A',
+  postalCode: service.postalCode || 'N/A',
   lat: Number(service.latitude ?? service.lat),
   lng: Number(service.longitude ?? service.lng),
-  phone: service.phone || null,
-  rating: Number.isFinite(service.rating) ? service.rating : null,
-  totalReviews: Number.isFinite(service.totalReviews) ? service.totalReviews : null,
-  openNow: typeof service.openNow === 'boolean' ? service.openNow : null,
+  phone: service.phone || 'N/A',
+  website: service.website || 'N/A',
+  openingHours: service.openingHours || 'N/A',
+  rating: Number.isFinite(Number(service.rating)) ? Number(service.rating) : 'N/A',
+  totalReviews: Number.isFinite(Number(service.totalReviews)) ? Number(service.totalReviews) : 'N/A',
+  openNow: typeof service.openNow === 'boolean' ? service.openNow : 'N/A',
   categoryId: service.categoryId || 'service',
   filterId: service.filterId || 'all',
   color: service.color || '#64748b',
   markerLabel: service.markerLabel || 'S',
   googleMapsLink: service.googleMapsLink,
+  source: service.source || 'OpenStreetMap',
+  updatedAt: service.updatedAt || 'N/A',
   fetchedAt: service.fetchedAt || Date.now()
 });
 

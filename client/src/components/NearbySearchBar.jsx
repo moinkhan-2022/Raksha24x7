@@ -6,7 +6,7 @@ export const SORT_OPTIONS = [
   { value: 'rating', label: 'Highest Rated' },
   { value: 'open', label: 'Open Now' },
   { value: 'name', label: 'A to Z' },
-  { value: 'recent', label: 'Recently Fetched' }
+  { value: 'recent', label: 'Recently Loaded' }
 ];
 
 function NearbySearchBar({ query, onSearchChange, sortBy, onSortChange, resultCount }) {
@@ -28,7 +28,7 @@ function NearbySearchBar({ query, onSearchChange, sortBy, onSortChange, resultCo
           type="search"
           value={inputValue}
           onChange={(event) => setInputValue(event.target.value)}
-          placeholder="Search name, category, address or phone..."
+          placeholder="Search name, category, city, state or phone..."
           className="w-full rounded-xl border border-white/10 bg-slate-950/55 py-3 pl-10 pr-20 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-blue-400/50 focus:ring-2 focus:ring-blue-500/20"
         />
         <span className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-2">

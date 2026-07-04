@@ -14,11 +14,12 @@ import WeatherWidget from '../components/WeatherWidget';
 import useEmergencyMode from '../hooks/useEmergencyMode';
 import useRouteNavigation from '../hooks/useRouteNavigation';
 import { getEnvironmentData } from '../services/environmentService';
-import { getNearbyEmergencyServices } from '../services/googlePlacesService';
+import { fetchNearbyServices } from '../services/osmApi';
 import { buildGoogleMapsNavigationUrl, getRecentRoutes, saveRecentRoute } from '../services/navigationService';
 import { calculateDistanceMeters, getServiceDistance } from '../utils/distance';
 import { estimateEtaMinutes, formatEta } from '../utils/etaCalculator';
 import { GOOGLE_MAP_LIBRARIES, GOOGLE_MAP_LOADER_ID } from '../utils/googleMapConfig';
+import { ALLOWED_SEARCH_RADII } from '../utils/overpassQuery';
 import {
   addRecentlyViewedService,
   getFavoriteServices,
@@ -84,6 +85,7 @@ function NearbyServicesExperience({ apiKey }) {
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('nearest');
+  const [searchRadius, setSearchRadius] = useState(5000);
   const [selectedService, setSelectedService] = useState(null);
   const [locationLoading, setLocationLoading] = useState(true);
   const [servicesLoading, setServicesLoading] = useState(false);
@@ -157,7 +159,6 @@ function NearbyServicesExperience({ apiKey }) {
     if (forceSearch || movedFromSearch >= 50) {
       window.clearTimeout(locationDebounceRef.current);
       locationDebounceRef.current = window.setTimeout(() => {
-        if (movedFromSearch >= 50) forceRefreshRef.current = true;
         serviceSearchLocationRef.current = next;
         setServiceSearchLocation(next);
       }, forceSearch ? 0 : 1200);
@@ -212,14 +213,13 @@ function NearbyServicesExperience({ apiKey }) {
 
   useEffect(() => {
     const interval = window.setInterval(() => {
-      forceRefreshRef.current = true;
       setRefreshVersion((version) => version + 1);
     }, 30000);
     return () => window.clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    if (!isLoaded || !mapInstance || !serviceSearchLocation) return undefined;
+    if (!isLoaded || !serviceSearchLocation) return undefined;
     if (!isOnline) {
       setServicesError('No Internet connection. Nearby services will refresh when you reconnect.');
       return undefined;
@@ -233,10 +233,12 @@ function NearbyServicesExperience({ apiKey }) {
     setSearchWarnings([]);
     setSelectedService(null);
 
-    getNearbyEmergencyServices(mapInstance, {
-      lat: serviceSearchLocation.latitude,
-      lng: serviceSearchLocation.longitude
-    }, { force })
+    const controller = new AbortController();
+    fetchNearbyServices(serviceSearchLocation.latitude, serviceSearchLocation.longitude, {
+      radius: searchRadius,
+      force,
+      signal: controller.signal
+    })
       .then(({ services: nearbyServices, warnings }) => {
         if (!mountedRef.current || searchId !== searchIdRef.current) return;
         setServices(nearbyServices);
@@ -251,8 +253,8 @@ function NearbyServicesExperience({ apiKey }) {
         if (mountedRef.current && searchId === searchIdRef.current) setServicesLoading(false);
       });
 
-    return () => { searchIdRef.current += 1; };
-  }, [isLoaded, isOnline, mapInstance, refreshVersion, serviceSearchLocation]);
+    return () => { controller.abort(); searchIdRef.current += 1; };
+  }, [isLoaded, isOnline, refreshVersion, searchRadius, serviceSearchLocation]);
 
   useEffect(() => {
     if (!serviceSearchLocation || !isOnline) return undefined;
@@ -438,6 +440,19 @@ function NearbyServicesExperience({ apiKey }) {
     }
   }, [showToast, userLocation]);
 
+  const shareService = useCallback(async (service) => {
+    if (!service) return;
+    recordRecentlyViewed(service);
+    const text = `${service.name}\n${service.categoryLabel}\n${service.address}\n${service.googleMapsLink}`;
+    try {
+      if (navigator.share) await navigator.share({ title: service.name, text, url: service.googleMapsLink });
+      else await copyText(text);
+      showToast(navigator.share ? 'Service shared' : 'Service details copied');
+    } catch (error) {
+      if (error?.name !== 'AbortError') showToast('Unable to share service details', 'error');
+    }
+  }, [recordRecentlyViewed, showToast]);
+
   const selectedNavigationUrl = useMemo(
     () => currentSelectedService ? buildGoogleMapsNavigationUrl(userLocation, currentSelectedService, routeNavigation.travelMode) : '',
     [currentSelectedService, routeNavigation.travelMode, userLocation]
@@ -454,10 +469,10 @@ function NearbyServicesExperience({ apiKey }) {
   };
 
   if (loadError) {
-    return <PageError title="Google Maps failed to load" message="Check your network, API key restrictions, and that Maps JavaScript API and Places API are enabled." />;
+    return <PageError title="Google Maps failed to load" message="Check your network, API key restrictions, and that Maps JavaScript API is enabled." />;
   }
 
-  if (!isLoaded) return <PageLoading message="Loading Google Maps and Places..." />;
+  if (!isLoaded) return <PageLoading message="Loading Google Maps..." />;
 
   return (
     <main className="mx-auto max-w-[1600px] px-4 py-5 md:px-6">
@@ -465,14 +480,21 @@ function NearbyServicesExperience({ apiKey }) {
       <section className="rounded-3xl border border-white/10 bg-white/5 p-5 shadow-2xl shadow-blue-950/30 backdrop-blur-xl md:p-6">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-300">5 km Safety Radius</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-300">OpenStreetMap Emergency Intelligence</p>
             <h1 className="mt-2 text-2xl font-bold md:text-3xl">Nearby Emergency Services</h1>
             <p className="mt-2 text-sm text-slate-300">Search, compare, save, and contact emergency support around you.</p>
           </div>
-          <button type="button" onClick={requestCurrentLocation} disabled={locationLoading || servicesLoading} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50">
-            <RefreshCw className={`h-4 w-4 ${locationLoading || servicesLoading ? 'animate-spin' : ''}`} />
-            {locationLoading ? 'Getting location...' : servicesLoading ? 'Loading services...' : 'Refresh'}
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-950/40 px-3 text-xs text-slate-300">Radius
+              <select value={searchRadius} onChange={(event) => setSearchRadius(Number(event.target.value))} className="bg-transparent py-3 font-semibold text-white outline-none">
+                {ALLOWED_SEARCH_RADII.map((radius) => <option key={radius} value={radius} className="bg-slate-900">{radius < 1000 ? `${radius} m` : `${radius / 1000} km`}</option>)}
+              </select>
+            </label>
+            <button type="button" onClick={requestCurrentLocation} disabled={locationLoading || servicesLoading} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50">
+              <RefreshCw className={`h-4 w-4 ${locationLoading || servicesLoading ? 'animate-spin' : ''}`} />
+              {locationLoading ? 'Getting location...' : servicesLoading ? 'Loading services...' : 'Refresh'}
+            </button>
+          </div>
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -505,16 +527,19 @@ function NearbyServicesExperience({ apiKey }) {
               onSelectService={selectService}
               onMapLoad={setMapInstance}
               onMapUnmount={() => setMapInstance(null)}
-              directions={routeNavigation.directions}
               trafficEnabled={trafficEnabled}
               onTrafficToggle={() => setTrafficEnabled((enabled) => !enabled)}
               emergencyServiceIds={emergencyMode.enabled ? emergencyMode.priorityIds : null}
               onNotify={showToast}
+              favoriteIds={favoriteIds}
+              onToggleFavorite={toggleFavorite}
+              onNavigate={navigateToService}
+              onShare={shareService}
             />
           ) : (
             <div className="grid h-full place-items-center p-6 text-center"><div><MapPin className="mx-auto h-10 w-10 text-blue-300" /><p className="mt-4 font-semibold">{locationLoading ? 'Getting your current location...' : 'Location is required to search nearby services.'}</p><p className="mt-2 text-sm text-slate-400">Allow location access, then use Refresh.</p></div></div>
           )}
-          {servicesLoading && userLocation && <div className="absolute inset-x-3 top-3 flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-slate-950/90 px-4 py-3 text-sm shadow-xl backdrop-blur-xl md:left-1/2 md:right-auto md:-translate-x-1/2"><RefreshCw className="h-4 w-4 animate-spin text-blue-300" /> Loading nearby services...</div>}
+          {servicesLoading && userLocation && <div className="absolute inset-x-3 top-3 overflow-hidden rounded-xl border border-white/10 bg-slate-950/90 px-4 py-3 text-sm shadow-xl backdrop-blur-xl md:left-1/2 md:right-auto md:w-72 md:-translate-x-1/2"><div className="flex items-center justify-center gap-2"><RefreshCw className="h-4 w-4 animate-spin text-blue-300" /> Loading OpenStreetMap services...</div><div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10"><span className="block h-full w-1/2 animate-pulse rounded-full bg-blue-400" /></div></div>}
           {userLocation && <EmergencyPanel active={emergencyMode.enabled} onToggle={emergencyMode.toggle} nearestByCategory={emergencyMode.nearestByCategory} onSelect={selectService} onNavigate={navigateToService} onShareLocation={shareCurrentLocation} />}
           {userLocation && <RouteInfo service={currentSelectedService} travelMode={routeNavigation.travelMode} onModeChange={routeNavigation.setTravelMode} routeInfo={routeNavigation.routeInfo} loading={routeNavigation.loading} error={routeNavigation.error} onClear={() => { setSelectedService(null); routeNavigation.clearRoute(); }} onNavigate={() => recordNavigation(currentSelectedService)} navigationUrl={selectedNavigationUrl} />}
         </div>
