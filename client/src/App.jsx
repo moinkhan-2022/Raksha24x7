@@ -32,7 +32,7 @@ function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/dashboard" element={<ProtectedRoute allowGuest><Dashboard /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute allowGuest={false}><ProfilePage /></ProtectedRoute>} />
-      <Route path="/settings" element={<ProtectedRoute allowGuest={false}><SettingsPage /></ProtectedRoute>} />
+      <Route path="/settings/*" element={<ProtectedRoute allowGuest={false}><SettingsPage /></ProtectedRoute>} />
       <Route path="/emergency-contacts" element={<ProtectedRoute allowGuest={false}><EmergencyContactsPage /></ProtectedRoute>} />
       <Route path="/sos-history" element={<ProtectedRoute allowGuest={false}><SosHistoryPage /></ProtectedRoute>} />
       <Route path="/live-location" element={<ProtectedRoute allowGuest={false}><LiveLocationPage /></ProtectedRoute>} />
