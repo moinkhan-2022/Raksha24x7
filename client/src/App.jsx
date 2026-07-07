@@ -17,6 +17,7 @@ import { useAuth } from './context/AuthContext';
 
 const GoogleMapPage = lazy(() => import('./pages/GoogleMapPage'));
 const NearbyServicesPage = lazy(() => import('./pages/NearbyServicesPage'));
+const EmergencyNumbersPage = lazy(() => import('./pages/EmergencyNumbersPage'));
 
 function App() {
   const { user } = useAuth();
@@ -37,6 +38,7 @@ function App() {
       <Route path="/live-location" element={<ProtectedRoute allowGuest={false}><LiveLocationPage /></ProtectedRoute>} />
       <Route path="/google-map" element={<ProtectedRoute allowGuest={false}><Suspense fallback={<div className="grid min-h-screen place-items-center bg-slate-950 text-slate-300">Loading map...</div>}><GoogleMapPage /></Suspense></ProtectedRoute>} />
       <Route path="/nearby-services" element={<ProtectedRoute allowGuest={false}><Suspense fallback={<div className="grid min-h-screen place-items-center bg-slate-950 text-slate-300">Loading nearby services...</div>}><NearbyServicesPage /></Suspense></ProtectedRoute>} />
+      <Route path="/emergency-numbers" element={<ProtectedRoute allowGuest><Suspense fallback={<div className="grid min-h-screen place-items-center bg-slate-950 text-slate-300">Loading emergency numbers...</div>}><EmergencyNumbersPage /></Suspense></ProtectedRoute>} />
       <Route path="*" element={<Navigate to={user ? '/dashboard' : '/'} replace />} />
     </Routes>
   );

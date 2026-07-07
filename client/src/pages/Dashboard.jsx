@@ -8,6 +8,7 @@ import Toast from '../components/Toast';
 import sosService from '../services/sosService';
 import SOSCountdownModal from '../components/SOSCountdownModal';
 import locationService from '../services/locationService';
+import EmergencyNumbersDashboardCard from '../components/EmergencyNumbersDashboardCard';
 
 const cards = [
   { icon: LifeBuoy, title: 'SOS', subtitle: 'Trigger immediate emergency alert' },
@@ -15,7 +16,7 @@ const cards = [
   { icon: Map, title: 'Google Maps', subtitle: 'View your current location on an interactive map', path: '/google-map' },
   { icon: Users, title: 'Contacts', subtitle: 'Manage emergency contact list' },
   { icon: MapPinned, title: 'Nearby Services', subtitle: 'Locate hospitals and police nearby', path: '/nearby-services' },
-  { icon: PhoneCall, title: 'Emergency Numbers', subtitle: 'Quick access to helplines' },
+  { icon: PhoneCall, title: 'Emergency Numbers', subtitle: 'Quick access to helplines', path: '/emergency-numbers' },
   { icon: ShieldCheck, title: 'Safety Tips', subtitle: 'Read practical safety guidance' }
 ];
 
@@ -141,6 +142,8 @@ function Dashboard() {
             </motion.button>
           ))}
         </section>
+
+        <section className="mt-6"><EmergencyNumbersDashboardCard /></section>
 
         <div className="flex justify-center py-8">
           <motion.button onClick={triggerSos} disabled={sending || countOpen} whileHover={{ scale: 1.04 }} animate={{ boxShadow: ['0 0 20px rgba(239,68,68,.35)', '0 0 40px rgba(239,68,68,.6)', '0 0 20px rgba(239,68,68,.35)'] }} transition={{ duration: 1.6, repeat: Infinity }} className="relative h-44 w-44 rounded-full bg-gradient-to-br from-red-500 to-red-700 text-3xl font-extrabold text-white shadow-2xl disabled:opacity-60">
