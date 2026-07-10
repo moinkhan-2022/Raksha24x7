@@ -299,7 +299,7 @@ export const createEmergencyEvent = async ({ userId, payload }) => {
   const links = buildGoogleMapLinks(safePayload);
   const liveTrackingLink = `${clientUrl()}/sos-tracking/${token}`;
   const message = safePayload.message || buildEmergencyMessage({ user, payload: safePayload, googleMapLink: links.googleMapLink, liveTrackingLink });
-  const contactNotifications = buildEmergencyContactNotifications({
+  let contactNotifications = buildEmergencyContactNotifications({
     user,
     contacts: user.contacts,
     googleMapLink: links.googleMapLink,
@@ -307,6 +307,46 @@ export const createEmergencyEvent = async ({ userId, payload }) => {
     liveTrackingLink,
     payload: { ...safePayload, message }
   });
+  const isWhatsAppFlow = payload.communicationMode === 'whatsapp';
+  if (isWhatsAppFlow) {
+    const statusByContact = new Map((payload.whatsappContacts || []).map((item) => [String(item.contactId), item]));
+    contactNotifications = user.contacts.map((contact) => {
+      const statusItem = statusByContact.get(String(contact._id)) || {};
+      const status = statusItem.status === 'sent' ? 'sent' : statusItem.status === 'skipped' ? 'skipped' : 'queued';
+      return {
+        contactId: contact._id,
+        name: contact.name,
+        relationship: contact.relationship,
+        phone: contact.phone,
+        email: contact.email || '',
+        channels: [{
+          channel: 'whatsapp',
+          provider: 'device-whatsapp',
+          status,
+          reason: status === 'skipped' ? 'User skipped WhatsApp message' : status === 'queued' ? 'User did not confirm WhatsApp message sent' : '',
+          payload: {
+            userName: user.name || 'Raksha24x7 user',
+            userPhone: user.phone || '',
+            contactName: contact.name,
+            emergencyType: safePayload.emergencyType,
+            emergencyMessage: message,
+            latitude: safePayload.latitude,
+            longitude: safePayload.longitude,
+            accuracy: safePayload.accuracy,
+            address: safePayload.address,
+            batteryLevel: safePayload.batteryLevel,
+            locationLink: links.googleMapLink,
+            directionsLink: links.directionsLink,
+            liveTrackingLink,
+            dateTime: dateTime(safePayload.timestamp),
+            emergencyStatus: status === 'sent' ? 'WhatsApp Sent' : 'Not Sent'
+          },
+          sentAt: status === 'sent' ? new Date() : null,
+          deliveredAt: status === 'sent' ? new Date() : null
+        }]
+      };
+    });
+  }
 
   const sos = await Sos.create({
     userId,
@@ -328,10 +368,10 @@ export const createEmergencyEvent = async ({ userId, payload }) => {
     contactNotifications,
     notificationPlan: summarizeNotificationPlan(contactNotifications),
     deliverySummary: summarizeDelivery(contactNotifications),
-    status: 'sending',
+    status: isWhatsAppFlow ? 'sent' : 'sending',
     statusTimeline: [
       { status: 'preparing', message: 'Preparing emergency notifications.', at: new Date() },
-      { status: 'sending', message: 'Sending notifications to emergency contacts.', at: new Date() }
+      { status: isWhatsAppFlow ? 'sent' : 'sending', message: isWhatsAppFlow ? 'WhatsApp emergency communication recorded.' : 'Sending notifications to emergency contacts.', at: new Date() }
     ]
   });
 
@@ -347,6 +387,8 @@ export const createEmergencyEvent = async ({ userId, payload }) => {
       metadata: { sosId: String(sos._id), emergencyId: sos.emergencyId, googleMapLink: sos.googleMapLink, liveTrackingLink: sos.liveTrackingLink }
     }
   }).catch(() => null);
+
+  if (isWhatsAppFlow) return { sos, trackingToken: token };
 
   const processed = await processSosDeliveries(sos, user);
   return { sos: processed, trackingToken: token };

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
+  CheckCircle2, Copy, ExternalLink,
   Ambulance, CloudSun, ContactRound, Flame, Hospital, LocateFixed, MapPinned,
-  Moon, PhoneCall, ShieldCheck, Siren, Sun
+  MessageCircle, Moon, PhoneCall, ShieldCheck, Siren, Sun, X
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
@@ -28,7 +29,7 @@ const applyThemePreference = (theme) => {
 };
 
 function Dashboard() {
-  const { user } = useAuth();
+  const { user, getProfile } = useAuth();
   const { emergencyNotify } = useNotifications();
   const navigate = useNavigate();
   const location = useLocation();
@@ -43,6 +44,10 @@ function Dashboard() {
   const [latestLocation, setLatestLocation] = useState(null);
   const [environment, setEnvironment] = useState({ weather: null, airQuality: null });
   const [environmentLoading, setEnvironmentLoading] = useState(false);
+  const [sosSession, setSosSession] = useState(null);
+  const [whatsappStatuses, setWhatsappStatuses] = useState({});
+  const [pendingConfirm, setPendingConfirm] = useState(null);
+  const [savingSosHistory, setSavingSosHistory] = useState(false);
 
   useEffect(() => {
     applyThemePreference(theme);
@@ -123,16 +128,21 @@ function Dashboard() {
         setSending(true);
         if (!navigator.geolocation) throw new Error('Geolocation is not supported by your browser');
         const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 }));
-        const payload = { latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy: position.coords.accuracy, timestamp: new Date().toISOString() };
-        const { data } = await sosService.send(payload);
-        const locationLink = data?.sos?.googleMapLink || `https://maps.google.com/?q=${payload.latitude},${payload.longitude}`;
+        const contacts = (user?.contacts?.length ? user.contacts : (await getProfile().catch(() => user))?.contacts || []).slice(0, 5);
+        const payload = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          timestamp: new Date().toISOString(),
+          address: 'Address unavailable'
+        };
+        const locationLink = `https://maps.google.com/?q=${payload.latitude},${payload.longitude}`;
         setCurrentLocation(payload);
-        emergencyNotify(buildSosNotification({
-          userName: user?.name,
-          locationLink,
-          emergencyStatus: data?.sos?.status || 'Active'
-        }));
-        setToast('SOS alert sent successfully');
+        const message = buildWhatsAppEmergencyMessage({ location: payload, user });
+        const initialStatuses = Object.fromEntries(contacts.map((contact) => [String(contact._id || contact.phone), 'not_sent']));
+        setWhatsappStatuses(initialStatuses);
+        setSosSession({ location: payload, locationLink, message, contacts, openedAt: new Date().toISOString() });
+        setToast(contacts.length ? 'Choose contacts to notify on WhatsApp.' : 'No emergency contacts added.');
       } catch (error) {
         setToast(error?.code === 1 ? 'Location permission denied' : error?.response?.data?.message || error?.message || 'Failed to send SOS');
       } finally {
@@ -142,7 +152,72 @@ function Dashboard() {
       }
     };
     send();
-  }, [count, countOpen, emergencyNotify, user?.name]);
+  }, [count, countOpen, getProfile, user]);
+
+  const openWhatsApp = (contact) => {
+    if (!sosSession) return;
+    const phone = normalizeWhatsAppPhone(contact.phone);
+    if (!phone) {
+      setToast('Contact phone number is invalid.');
+      return;
+    }
+    setPendingConfirm(contact);
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(sosSession.message)}`;
+    const opened = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!opened) {
+      window.location.href = url;
+      setToast('Opening WhatsApp. If it does not open, copy the message manually.');
+    }
+  };
+
+  const markWhatsAppStatus = (contact, status) => {
+    const id = String(contact._id || contact.phone);
+    setWhatsappStatuses((current) => ({ ...current, [id]: status }));
+    setPendingConfirm(null);
+  };
+
+  const copyEmergencyMessage = async () => {
+    if (!sosSession?.message) return;
+    try {
+      await navigator.clipboard.writeText(sosSession.message);
+      setToast('Emergency message copied.');
+    } catch {
+      setToast('Could not copy message. Please copy manually.');
+    }
+  };
+
+  const saveWhatsappSosHistory = async () => {
+    if (!sosSession) return;
+    try {
+      setSavingSosHistory(true);
+      const whatsappContacts = sosSession.contacts.map((contact) => {
+        const id = String(contact._id || contact.phone);
+        const status = whatsappStatuses[id] === 'sent' ? 'sent' : whatsappStatuses[id] === 'skipped' ? 'skipped' : 'not_sent';
+        return { contactId: contact._id, phone: contact.phone, name: contact.name, status };
+      });
+      const { data } = await sosService.start({
+        ...sosSession.location,
+        communicationMode: 'whatsapp',
+        emergencyType: 'sos_whatsapp',
+        message: sosSession.message,
+        whatsappContacts
+      });
+      emergencyNotify(buildSosNotification({
+        userName: user?.name,
+        locationLink: sosSession.locationLink,
+        emergencyStatus: data?.sos?.status || 'WhatsApp'
+      }));
+      const sent = whatsappContacts.filter((item) => item.status === 'sent').length;
+      setToast(sent === sosSession.contacts.length ? 'SOS communication completed.' : 'SOS WhatsApp history saved.');
+      setSosSession(null);
+      setWhatsappStatuses({});
+      setPendingConfirm(null);
+    } catch (error) {
+      setToast(error?.response?.data?.message || 'Could not save SOS history.');
+    } finally {
+      setSavingSosHistory(false);
+    }
+  };
 
   const cancelCountdown = () => {
     setCountOpen(false);
@@ -174,6 +249,18 @@ function Dashboard() {
       <Navbar dashboard notifications={notifications} />
       <Toast message={toast} type={/failed|denied|unavailable/i.test(toast) ? 'error' : 'success'} />
       <SOSCountdownModal open={countOpen} count={count} onCancel={cancelCountdown} />
+      <WhatsAppSosSheet
+        session={sosSession}
+        statuses={whatsappStatuses}
+        pendingConfirm={pendingConfirm}
+        saving={savingSosHistory}
+        onClose={() => { setSosSession(null); setPendingConfirm(null); }}
+        onManageContacts={() => navigate('/emergency-contacts')}
+        onOpenWhatsApp={openWhatsApp}
+        onMarkStatus={markWhatsAppStatus}
+        onCopy={copyEmergencyMessage}
+        onDone={saveWhatsappSosHistory}
+      />
 
       <main className="mx-auto max-w-7xl px-4 py-5 md:px-6">
         <section className={`rounded-3xl border p-5 shadow-sm transition-colors duration-300 md:p-6 ${theme === 'light' ? 'border-slate-200 bg-white' : 'border-white/10 bg-white/[0.05]'}`}>
@@ -236,6 +323,151 @@ function Dashboard() {
       </main>
     </div>
   );
+}
+
+const normalizeWhatsAppPhone = (phone = '') => {
+  const digits = String(phone).replace(/\D/g, '');
+  if (digits.length === 10) return `91${digits}`;
+  if (digits.length >= 11 && digits.length <= 15) return digits;
+  return '';
+};
+
+const buildWhatsAppEmergencyMessage = ({ location, user }) => {
+  const mapsLink = `https://maps.google.com/?q=${location.latitude},${location.longitude}`;
+  return [
+    '🚨 EMERGENCY ALERT',
+    '',
+    'I need immediate help.',
+    '',
+    'My current location is:',
+    mapsLink,
+    '',
+    'Current Address:',
+    location.address || 'Address unavailable',
+    '',
+    'Coordinates:',
+    `${Number(location.latitude).toFixed(6)}, ${Number(location.longitude).toFixed(6)}`,
+    '',
+    'Time:',
+    new Date(location.timestamp || Date.now()).toLocaleString(),
+    '',
+    user?.phone ? `My phone: ${user.phone}` : '',
+    '',
+    'Please contact me immediately.',
+    '',
+    'Sent using Raksha24x7'
+  ].filter((line, index, lines) => line !== '' || lines[index - 1] !== '').join('\n');
+};
+
+function WhatsAppSosSheet({ session, statuses, pendingConfirm, saving, onClose, onManageContacts, onOpenWhatsApp, onMarkStatus, onCopy, onDone }) {
+  if (!session) return null;
+  const contacts = session.contacts || [];
+  const sentCount = contacts.filter((contact) => statuses[String(contact._id || contact.phone)] === 'sent').length;
+  const progress = contacts.length ? Math.round((sentCount / contacts.length) * 100) : 0;
+  const nextContact = contacts.find((contact) => statuses[String(contact._id || contact.phone)] !== 'sent' && statuses[String(contact._id || contact.phone)] !== 'skipped');
+  const allSent = contacts.length > 0 && sentCount === contacts.length;
+
+  return (
+    <div className="fixed inset-0 z-[95] bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="whatsapp-sos-title">
+      <div className="absolute inset-x-0 bottom-0 mx-auto max-h-[92vh] max-w-3xl overflow-y-auto rounded-t-3xl border border-white/10 bg-slate-950 p-4 text-white shadow-2xl md:inset-y-6 md:rounded-3xl md:p-6">
+        <header className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-300">WhatsApp SOS</p>
+            <h2 id="whatsapp-sos-title" className="mt-1 text-2xl font-bold">Emergency Contacts</h2>
+            <p className="mt-1 text-sm text-slate-400">Choose a contact to notify through WhatsApp.</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close SOS workflow" className="grid h-10 w-10 place-items-center rounded-full hover:bg-white/10">
+            <X className="h-5 w-5" />
+          </button>
+        </header>
+
+        <section className="mt-5 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-emerald-100">{sentCount} / {contacts.length} Contacts Notified</p>
+              {nextContact && <p className="mt-1 text-sm text-slate-300">Next Contact 👉 {nextContact.name}</p>}
+              {allSent && <p className="mt-1 text-sm font-semibold text-emerald-200">✅ SOS Communication Completed</p>}
+            </div>
+            <button type="button" onClick={onCopy} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold hover:bg-white/10">
+              <Copy className="mr-1 inline h-4 w-4" /> Copy Message
+            </button>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800">
+            <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${progress}%` }} />
+          </div>
+        </section>
+
+        {pendingConfirm && (
+          <section className="mt-4 rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4">
+            <p className="font-semibold text-amber-100">Did you send the message to {pendingConfirm.name}?</p>
+            <div className="mt-3 flex gap-2">
+              <button type="button" onClick={() => onMarkStatus(pendingConfirm, 'sent')} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500">Yes</button>
+              <button type="button" onClick={() => onMarkStatus(pendingConfirm, 'not_sent')} className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold hover:bg-white/10">No</button>
+            </div>
+          </section>
+        )}
+
+        {!contacts.length ? (
+          <section className="mt-5 grid min-h-60 place-items-center rounded-3xl border border-dashed border-white/10 bg-white/[0.04] p-6 text-center">
+            <div>
+              <ContactRound className="mx-auto h-10 w-10 text-slate-400" />
+              <h3 className="mt-3 text-lg font-bold">No Emergency Contacts Added</h3>
+              <p className="mt-1 text-sm text-slate-400">Add trusted contacts before using WhatsApp SOS.</p>
+              <button type="button" onClick={onManageContacts} className="mt-4 rounded-2xl bg-red-600 px-5 py-3 text-sm font-semibold text-white hover:bg-red-500">Manage Contacts</button>
+            </div>
+          </section>
+        ) : (
+          <section className="mt-5 grid gap-3">
+            {contacts.map((contact) => {
+              const id = String(contact._id || contact.phone);
+              const status = statuses[id] || 'not_sent';
+              const isNext = nextContact && String(nextContact._id || nextContact.phone) === id;
+              return (
+                <article key={id} className={`rounded-2xl border p-4 transition ${isNext ? 'border-emerald-400/50 bg-emerald-500/10' : 'border-white/10 bg-white/[0.04]'}`}>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-red-500/15 text-lg font-bold text-red-200">
+                        {String(contact.name || '?').trim().charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold">{contact.name}</p>
+                        <p className="text-sm text-slate-400">{contact.relationship || 'Emergency Contact'} • {contact.phone}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={status} />
+                      <button type="button" onClick={() => onOpenWhatsApp(contact)} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500">
+                        <MessageCircle className="mr-1 inline h-4 w-4" /> Send via WhatsApp
+                      </button>
+                      <button type="button" onClick={() => onMarkStatus(contact, 'skipped')} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold hover:bg-white/10">Skip</button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </section>
+        )}
+
+        {contacts.length > 0 && (
+          <footer className="sticky bottom-0 mt-5 flex flex-col gap-2 border-t border-white/10 bg-slate-950/95 pt-4 sm:flex-row">
+            <button type="button" onClick={onDone} disabled={saving} className="flex-1 rounded-2xl bg-red-600 px-5 py-3 text-sm font-bold text-white hover:bg-red-500 disabled:opacity-60">
+              {saving ? 'Saving...' : allSent ? `Done • ${sentCount} / ${contacts.length} Contacts Notified Successfully` : 'Finish & Save SOS History'}
+            </button>
+            {allSent && <span className="inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-200"><CheckCircle2 className="h-4 w-4" /> Completed</span>}
+            <a href={session.locationLink} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold hover:bg-white/10">
+              <ExternalLink className="mr-1 h-4 w-4" /> Maps
+            </a>
+          </footer>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status }) {
+  if (status === 'sent') return <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-300">✓ Sent</span>;
+  if (status === 'skipped') return <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-300">Skipped</span>;
+  return <span className="rounded-full bg-slate-500/15 px-3 py-1 text-xs font-semibold text-slate-300">○ Not Sent</span>;
 }
 
 function WeatherCard({ weather, loading, theme }) {
