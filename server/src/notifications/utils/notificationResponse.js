@@ -12,6 +12,9 @@ export const toPublicNotification = (notification) => ({
   readAt: notification.readAt,
   deliveredAt: notification.deliveredAt,
   deletedAt: notification.deletedAt,
+  isRead: Boolean(notification.readAt),
+  isUnread: !notification.readAt,
+  isNew: notification.createdAt ? Date.now() - new Date(notification.createdAt).getTime() < 24 * 60 * 60 * 1000 : false,
   createdAt: notification.createdAt,
   updatedAt: notification.updatedAt
 });

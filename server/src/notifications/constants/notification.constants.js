@@ -8,6 +8,7 @@ export const NOTIFICATION_TYPES = [
   'nearby-services',
   'emergency-numbers',
   'profile',
+  'email',
   'authentication',
   'future-updates'
 ];

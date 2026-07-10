@@ -42,12 +42,13 @@ export const createNotification = async ({ actorId, payload }) => {
 export const getNotifications = async ({ userId, query }) => {
   const { page, limit, skip } = getPagination(query);
   const filter = buildNotificationQuery({ userId, query });
-  const [items, total, unreadCount] = await Promise.all([
+  const [items, total, unreadCount, readCount] = await Promise.all([
     Notification.find(filter).sort(getSort(query)).skip(skip).limit(limit).lean(),
     Notification.countDocuments(filter),
-    Notification.countDocuments({ userId, deletedAt: null, readAt: null })
+    Notification.countDocuments({ userId, deletedAt: null, readAt: null }),
+    Notification.countDocuments({ userId, deletedAt: null, readAt: { $ne: null } })
   ]);
-  return { items, pagination: { page, limit, total, pages: Math.ceil(total / limit) || 1 }, unreadCount };
+  return { items, pagination: { page, limit, total, pages: Math.ceil(total / limit) || 1 }, unreadCount, readCount };
 };
 
 export const getNotificationById = async ({ userId, id }) => {
@@ -55,6 +56,17 @@ export const getNotificationById = async ({ userId, id }) => {
   const notification = await Notification.findOne({ _id: id, deletedAt: null }).lean();
   if (!notification) throw notificationErrors.notFound();
   if (!canAccess(notification, userId)) throw notificationErrors.permissionDenied();
+  return notification;
+};
+
+export const openNotification = async ({ userId, id }) => {
+  const existing = await getNotificationById({ userId, id });
+  const update = {
+    status: 'read',
+    readAt: existing.readAt || new Date()
+  };
+  const notification = await Notification.findByIdAndUpdate(existing._id, update, { new: true });
+  await logNotificationAction({ action: 'open', userId, notificationId: notification._id });
   return notification;
 };
 
@@ -102,6 +114,26 @@ export const deleteNotification = async ({ userId, id }) => {
   return notification;
 };
 
+export const deleteNotifications = async ({ userId, ids = [] }) => {
+  const validIds = ids.filter((id) => mongoose.Types.ObjectId.isValid(id));
+  const result = await Notification.updateMany(
+    { _id: { $in: validIds }, userId, deletedAt: null },
+    { $set: { deletedAt: new Date() } }
+  );
+  await logNotificationAction({ action: 'delete-many', userId, metadata: { ids: validIds, modified: result.modifiedCount } });
+  return result;
+};
+
+export const undoDeleteNotifications = async ({ userId, ids = [] }) => {
+  const validIds = ids.filter((id) => mongoose.Types.ObjectId.isValid(id));
+  const result = await Notification.updateMany(
+    { _id: { $in: validIds }, userId, deletedAt: { $ne: null } },
+    { $set: { deletedAt: null } }
+  );
+  await logNotificationAction({ action: 'undo-delete', userId, metadata: { ids: validIds, modified: result.modifiedCount } });
+  return result;
+};
+
 export const deleteAllNotifications = async ({ userId }) => {
   const result = await Notification.updateMany({ userId, deletedAt: null }, { $set: { deletedAt: new Date() } });
   await logNotificationAction({ action: 'delete-all', userId, metadata: { modified: result.modifiedCount } });
@@ -109,6 +141,12 @@ export const deleteAllNotifications = async ({ userId }) => {
 };
 
 export const countUnread = (userId) => Notification.countDocuments({ userId, deletedAt: null, readAt: null });
+
+export const exportNotifications = async ({ userId, query = {} }) => {
+  const filter = buildNotificationQuery({ userId, query });
+  const items = await Notification.find(filter).sort(getSort(query)).limit(1000).lean();
+  return items;
+};
 
 export const sendPush = async () => ({ queued: false, message: 'Push delivery is reserved for later Module 13 parts.' });
 export const sendEmail = async () => ({ queued: false, message: 'Email delivery is reserved for later Module 13 parts.' });

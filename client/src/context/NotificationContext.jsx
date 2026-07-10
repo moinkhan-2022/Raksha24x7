@@ -383,7 +383,7 @@ function NotificationDrawer({ open, notifications, onClose, onMarkAllRead, onCle
 
         <div className="mt-4 grid grid-cols-2 gap-2">
           <button type="button" onClick={onMarkAllRead} className={`rounded-2xl border px-3 py-2.5 text-sm font-semibold transition hover:-translate-y-0.5 ${isLight ? 'border-red-100 bg-red-50 text-red-600 hover:bg-red-100' : 'border-red-400/20 bg-red-500/10 text-red-200 hover:bg-red-500/15'}`}><CheckCheck className="mr-1 inline h-4 w-4" />Mark all as read</button>
-          <button type="button" onClick={() => onNavigate('/settings/notifications')} className={`rounded-2xl border px-3 py-2.5 text-sm font-semibold transition hover:-translate-y-0.5 ${isLight ? 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100' : 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10'}`}>View all notifications</button>
+          <button type="button" onClick={() => onNavigate('/notifications')} className={`rounded-2xl border px-3 py-2.5 text-sm font-semibold transition hover:-translate-y-0.5 ${isLight ? 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100' : 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10'}`}>View all notifications</button>
         </div>
 
         <label className="relative mt-4 block">

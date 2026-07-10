@@ -13,6 +13,7 @@ import EmergencyContactsPage from './pages/EmergencyContactsPage';
 import SosHistoryPage from './pages/SosHistoryPage';
 import LiveLocationPage from './pages/LiveLocationPage';
 import SosTrackingPage from './pages/SosTrackingPage';
+import NotificationCenterPage from './pages/NotificationCenterPage';
 import { useAuth } from './context/AuthContext';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import PWAStatus from './components/PWAStatus';
@@ -117,6 +118,7 @@ function App() {
         <Route path="/sos" element={<ProtectedRoute allowGuest><Navigate to="/dashboard?sos=true" replace /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute allowGuest><Suspense fallback={<PageSkeleton />}><Dashboard /></Suspense></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute allowGuest={false}><ProfilePage /></ProtectedRoute>} />
+        <Route path="/notifications" element={<ProtectedRoute allowGuest={false}><NotificationCenterPage /></ProtectedRoute>} />
         <Route path="/settings/*" element={<ProtectedRoute allowGuest={false}><SettingsPage /></ProtectedRoute>} />
         <Route path="/emergency-contacts" element={<ProtectedRoute allowGuest={false}><EmergencyContactsPage /></ProtectedRoute>} />
         <Route path="/sos-history" element={<ProtectedRoute allowGuest={false}><SosHistoryPage /></ProtectedRoute>} />
