@@ -1,16 +1,46 @@
-import { useEffect, useState } from 'react';
-import { ArrowRight, Heart, Phone, PhoneCall } from 'lucide-react';
+import { ArrowRight, Phone, PhoneCall } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import emergencyNumbersService from '../services/emergencyNumbersService';
 
-function EmergencyNumbersDashboardCard() {
+const numbers = [
+  { label: 'Emergency', number: '112' },
+  { label: 'Police', number: '100' },
+  { label: 'Ambulance', number: '108' }
+];
+
+function EmergencyNumbersDashboardCard({ theme = 'dark' }) {
   const navigate = useNavigate();
-  const [numbers, setNumbers] = useState([]);
-  const favorites = emergencyNumbersService.getFavorites();
-  const recentCalls = emergencyNumbersService.getRecents().filter((item) => item.action === 'called');
-  useEffect(() => { emergencyNumbersService.getEmergencyNumbers().then((items) => setNumbers(items.filter((item) => item.country === 'IN'))).catch(() => {}); }, []);
-  const top = [...numbers.filter((item) => favorites.includes(item.id)), ...numbers.filter((item) => ['112', '100', '108'].includes(item.number) && !favorites.includes(item.id))].slice(0, 3);
-  return <div className="rounded-2xl border border-red-400/20 bg-gradient-to-br from-red-500/10 to-white/[0.03] p-4"><div className="flex items-center justify-between"><div><p className="flex items-center gap-2 font-semibold text-white"><PhoneCall className="h-4 w-4 text-red-300" />Emergency Numbers</p><p className="mt-1 text-xs text-slate-400">{favorites.length} favorites · {recentCalls.length} recent calls</p></div><button type="button" onClick={() => navigate('/emergency-numbers')} className="rounded-xl bg-red-600 p-2 text-white" aria-label="Open Emergency Numbers"><ArrowRight className="h-4 w-4" /></button></div><div className="mt-3 grid gap-2 sm:grid-cols-3">{top.map((item) => <a key={item.id} href={`tel:${item.number}`} className="rounded-xl bg-slate-950/40 p-3"><p className="truncate text-xs text-slate-400">{favorites.includes(item.id) && <Heart className="mr-1 inline h-3 w-3 fill-rose-400 text-rose-400" />}{item.service}</p><p className="mt-1 flex items-center gap-1 font-bold text-red-200"><Phone className="h-3.5 w-3.5" />{item.number}</p></a>)}</div></div>;
+  return (
+    <section className={`rounded-2xl border p-5 shadow-sm ${theme === 'light' ? 'border-slate-200 bg-white' : 'border-red-400/20 bg-white/[0.05]'}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className={`flex items-center gap-2 font-semibold ${theme === 'light' ? 'text-slate-950' : 'text-white'}`}>
+            <PhoneCall className="h-4 w-4 text-red-300" />
+            Emergency Numbers
+          </p>
+          <p className={`mt-1 text-xs ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>One-tap emergency helplines</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/emergency-numbers')}
+          className="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-500"
+        >
+          View All
+          <ArrowRight className="ml-1 inline h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        {numbers.map((item) => (
+          <a key={item.number} href={`tel:${item.number}`} className={`rounded-xl p-3 text-center transition ${theme === 'light' ? 'bg-slate-100 hover:bg-slate-200' : 'bg-slate-950/40 hover:bg-slate-900/70'}`}>
+            <p className={`text-xs ${theme === 'light' ? 'text-slate-500' : 'text-slate-400'}`}>{item.label}</p>
+            <p className="mt-1 flex items-center justify-center gap-1 font-bold text-red-200">
+              <Phone className="h-3.5 w-3.5" />
+              {item.number}
+            </p>
+          </a>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 export default EmergencyNumbersDashboardCard;

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en-IN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#FF5A3D" />
+    <title>Raksha24x7 Offline</title>
+    <style>
+      :root { color-scheme: dark light; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-width: 320px;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 1.25rem;
+        background: radial-gradient(circle at top, rgb(255 90 61 / 0.18), transparent 28rem), #0f172a;
+        color: #f8fafc;
+      }
+      main {
+        width: min(100%, 28rem);
+        border: 1px solid rgb(255 255 255 / 0.12);
+        border-radius: 1.75rem;
+        padding: 2rem;
+        text-align: center;
+        background: rgb(15 23 42 / 0.82);
+        box-shadow: 0 24px 70px rgb(0 0 0 / 0.35);
+      }
+      img { width: 5.5rem; height: 5.5rem; border-radius: 1.5rem; box-shadow: 0 18px 44px rgb(255 90 61 / 0.24); }
+      h1 { margin: 1.25rem 0 0; font-size: 1.75rem; letter-spacing: -0.03em; }
+      p { margin: 0.75rem auto 0; color: #cbd5e1; line-height: 1.6; }
+      .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 1.5rem; }
+      button, a {
+        border: 0;
+        border-radius: 1rem;
+        padding: 0.9rem 1rem;
+        font-weight: 700;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      button { background: #ff5a3d; color: white; }
+      a { background: rgb(255 255 255 / 0.08); color: #e2e8f0; border: 1px solid rgb(255 255 255 / 0.12); }
+      @media (prefers-color-scheme: light) {
+        body { background: #f8fafc; color: #0f172a; }
+        main { background: white; border-color: #e2e8f0; box-shadow: 0 20px 60px rgb(15 23 42 / 0.12); }
+        p { color: #475569; }
+        a { background: #f1f5f9; color: #0f172a; border-color: #e2e8f0; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/icons/icon-192x192.png" alt="Raksha24x7" />
+      <h1>No Internet Connection</h1>
+      <p>You are offline. Some emergency features remain available.</p>
+      <div class="actions">
+        <button type="button" onclick="window.location.reload()">Retry</button>
+        <a href="/">Go Home</a>
+      </div>
+    </main>
+  </body>
+</html>

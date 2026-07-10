@@ -1,5 +1,10 @@
 import Sos from '../models/sos.model.js';
 import User from '../models/user.model.js';
+import {
+  buildEmergencyContactNotifications,
+  summarizeNotificationPlan
+} from '../services/emergencyNotification.service.js';
+import { queuePushDelivery } from '../services/pushProvider.service.js';
 
 export const sendSos = async (req, res) => {
   try {
@@ -8,7 +13,7 @@ export const sendSos = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Latitude and longitude are required' });
     }
 
-    const user = await User.findById(req.user._id).select('contacts');
+    const user = await User.findById(req.user._id).select('name email phone contacts');
     const contacts = (user?.contacts || []).map((c) => `${c.name} (${c.phone})`);
     if (!contacts.length) {
       return res.status(400).json({ success: false, message: 'No emergency contacts found. Please add at least one contact.' });
@@ -16,6 +21,14 @@ export const sendSos = async (req, res) => {
 
     const googleMapLink = `https://maps.google.com/?q=${latitude},${longitude}`;
     const message = `🚨 EMERGENCY ALERT 🚨\n\nI need immediate help.\n\nMy current location:\n${googleMapLink}\n\nPlease contact me immediately.\n\nSent from Raksha24x7.`;
+
+    const contactNotifications = buildEmergencyContactNotifications({
+      user,
+      contacts: user.contacts,
+      googleMapLink,
+      timestamp: new Date()
+    });
+    const notificationPlan = summarizeNotificationPlan(contactNotifications);
 
     const sos = await Sos.create({
       userId: req.user._id,
@@ -25,10 +38,28 @@ export const sendSos = async (req, res) => {
       googleMapLink,
       message,
       contacts,
+      contactNotifications,
+      notificationPlan,
       status: 'sent'
     });
+    const pushResult = await queuePushDelivery({
+      userId: req.user._id,
+      payload: {
+        notificationId: String(sos._id),
+        type: 'sos_activated',
+        title: '🚨 SOS Activated',
+        message: 'Emergency mode has started. Location is being shared.',
+        actionPath: '/dashboard?sos=true',
+        priority: 'critical',
+        actions: [
+          { action: 'open-sos', title: 'View SOS' },
+          { action: 'call-emergency', title: 'Call 112' }
+        ],
+        metadata: { googleMapLink, status: sos.status }
+      }
+    });
 
-    return res.status(201).json({ success: true, message: 'SOS alert sent', sos });
+    return res.status(201).json({ success: true, message: 'SOS alert sent', sos, notificationPlan, pushResult });
   } catch {
     return res.status(500).json({ success: false, message: 'Failed to send SOS' });
   }

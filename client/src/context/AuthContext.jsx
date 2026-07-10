@@ -1,5 +1,11 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import api, { authApi } from '../services/api';
+import { unregisterPushDevice } from '../services/pushNotificationService';
+import {
+  logoutGoogle,
+  signInWithGooglePopup,
+  syncFirebaseUserProfile
+} from '../services/googleAuthService';
 
 const AuthContext = createContext(null);
 
@@ -39,6 +45,17 @@ export function AuthProvider({ children }) {
     return data;
   };
 
+  const loginWithGoogle = async () => {
+    const { idToken, profile } = await signInWithGooglePopup();
+    const { data } = await authApi.google(idToken);
+    localStorage.setItem('raksha_token', data.token);
+    localStorage.removeItem('raksha_guest');
+    localStorage.setItem('raksha_user', JSON.stringify(data.user));
+    setUser(data.user);
+    await syncFirebaseUserProfile(data.user, { isNewUser: data.isNewUser, firebaseUid: profile.uid }).catch(() => undefined);
+    return data;
+  };
+
   const loginAsGuest = () => {
     localStorage.removeItem('raksha_token');
     localStorage.setItem('raksha_guest', '1');
@@ -48,29 +65,34 @@ export function AuthProvider({ children }) {
   };
 
   const register = async (payload) => {
-    // temporary debug logs
-    // eslint-disable-next-line no-console
-    console.log('Sending registration:', payload);
-    try {
-      const response = await api.post('/auth/register', payload);
-      // eslint-disable-next-line no-console
-      console.log('Response:', response);
-      const { data } = response;
-      localStorage.setItem('raksha_token', data.token);
-      localStorage.removeItem('raksha_guest');
-      localStorage.setItem('raksha_user', JSON.stringify(data.user));
-      setUser(data.user);
-      return data;
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error(error.response || error);
-      throw error;
-    }
+    const { data } = await api.post('/auth/register', payload);
+    localStorage.setItem('raksha_token', data.token);
+    localStorage.removeItem('raksha_guest');
+    localStorage.setItem('raksha_user', JSON.stringify(data.user));
+    setUser(data.user);
+    return data;
+  };
+
+  const setupPassword = async (payload) => {
+    const { data } = await authApi.setupPassword(payload);
+    localStorage.setItem('raksha_user', JSON.stringify(data.user));
+    setUser(data.user);
+    return data;
+  };
+
+  const completeProfile = async (payload) => {
+    const { data } = await authApi.completeProfile(payload);
+    localStorage.setItem('raksha_user', JSON.stringify(data.user));
+    setUser(data.user);
+    await syncFirebaseUserProfile(data.user, payload).catch(() => undefined);
+    return data;
   };
 
   const logout = async () => {
     try {
+      if (!user?.isGuest) await unregisterPushDevice();
       if (!user?.isGuest) await api.post('/auth/logout');
+      await logoutGoogle();
     } catch {
       // ignore logout API error and clear client state anyway
     } finally {
@@ -108,7 +130,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, login, loginAsGuest, logout, register, getProfile, updateProfile, changePassword }),
+    () => ({ user, loading, login, loginWithGoogle, loginAsGuest, logout, register, setupPassword, completeProfile, getProfile, updateProfile, changePassword }),
     [user, loading]
   );
 

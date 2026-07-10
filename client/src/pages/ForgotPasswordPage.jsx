@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import api from '../services/api';
+import { authApi } from '../services/api';
 import Toast from '../components/Toast';
 
 function ForgotPasswordPage() {
@@ -15,7 +15,7 @@ function ForgotPasswordPage() {
     if (!valid) return setToast('Please enter a valid email');
     try {
       setLoading(true);
-      const { data } = await api.post('/auth/forgot-password', { email });
+      const { data } = await authApi.forgotPassword(email);
       setToast(data.message || 'If this email exists, a password reset link has been sent.');
     } catch (err) {
       setToast(err.response?.data?.message || 'Request failed');

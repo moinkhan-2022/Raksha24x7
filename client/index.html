@@ -1,11 +1,40 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-IN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Raksha 24x7</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Personal Emergency Safety & Assistance Platform" />
+    <meta name="theme-color" content="#FF5A3D" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Raksha" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192x192.png" />
+    <title>Raksha24x7</title>
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem('raksha_theme') === 'light' ? 'light' : 'dark';
+          document.documentElement.dataset.rakshaTheme = theme;
+          document.documentElement.style.colorScheme = theme;
+        } catch (error) {
+          document.documentElement.dataset.rakshaTheme = 'dark';
+        }
+      })();
+    </script>
   </head>
   <body class="bg-slate-950">
+    <div id="raksha-startup-splash" aria-label="Loading Raksha24x7">
+      <div class="raksha-splash-card">
+        <img src="/icons/icon-192x192.png" alt="Raksha24x7" />
+        <h1>Raksha24x7</h1>
+        <p>Personal Emergency Safety</p>
+        <span class="raksha-splash-loader"></span>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

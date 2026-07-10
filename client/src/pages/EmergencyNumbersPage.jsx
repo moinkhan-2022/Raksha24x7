@@ -20,12 +20,6 @@ function EmergencyNumbersPage() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  useEffect(() => {
-    if ('serviceWorker' in navigator && import.meta.env.PROD) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
-    }
-  }, []);
-
   const countryNumbers = useMemo(
     () => emergency.numbers.filter((item) => item.country === emergency.filters.country),
     [emergency.filters.country, emergency.numbers]

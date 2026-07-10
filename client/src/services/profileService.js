@@ -10,7 +10,7 @@ const profileService = {
   },
   removePhoto: () => api.delete('/profile/photo'),
   changePassword: (payload) => api.put('/change-password', payload),
-  deleteAccount: () => api.delete('/account')
+  deleteAccount: (payload) => api.delete('/account', { data: payload })
 };
 
 export default profileService;

@@ -3,16 +3,11 @@ import { body } from 'express-validator';
 const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
 
 export const registerValidator = [
-  body('name').trim().notEmpty().withMessage('All fields are required'),
   body('email')
     .notEmpty().withMessage('All fields are required')
     .bail()
     .isEmail().withMessage('Invalid email format')
     .normalizeEmail(),
-  body('phone')
-    .notEmpty().withMessage('All fields are required')
-    .bail()
-    .matches(/^\d{10}$/).withMessage('Phone number must contain exactly 10 digits'),
   body('password')
     .notEmpty().withMessage('All fields are required')
     .bail()

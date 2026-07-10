@@ -1,34 +1,25 @@
 import { calculateDistanceMeters, formatDistance } from '../utils/distance';
-import { buildOverpassQuery, validateSearchRadius } from '../utils/overpassQuery';
+import { nearbyCacheKey } from '../utils/cacheKeys';
+import { elapsed, now } from '../utils/performance';
+import { buildOptimizedCategoryQuery } from '../utils/queryOptimizer';
+import { fetchWithTimeout, responseBytes } from '../utils/requestUtils';
 import { getCategoryMetadata } from '../utils/serviceCategories';
+import { validateSearchRadius } from '../utils/overpassQuery';
+import { recordFailure, recordRequest, recordSuccess } from './analytics';
+import { getCacheEntry, setCacheEntry } from './cacheService';
+import { getHealthiestServer, OVERPASS_SERVERS, recordServerFailure, recordServerSuccess } from './overpassServers';
+import { enqueueRequest } from './requestQueue';
+import { withRetry } from './retryManager';
 
-export const OVERPASS_ENDPOINTS = Object.freeze([
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter'
-]);
+export { OVERPASS_SERVERS as OVERPASS_ENDPOINTS };
 
 const NOMINATIM_ENDPOINT = 'https://nominatim.openstreetmap.org';
-const CACHE_TTL_MS = 5 * 60 * 1000;
-const MAX_ATTEMPTS = 3;
-const REQUEST_TIMEOUT_MS = 30000;
-const responseCache = new Map();
+const REQUEST_TIMEOUT_MS = 25000;
 const NA = 'N/A';
-
-const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
-const isAbortError = (error) => error?.name === 'AbortError';
-
-const fetchWithTimeout = async (url, options = {}) => {
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  const abortFromCaller = () => controller.abort();
-  options.signal?.addEventListener('abort', abortFromCaller, { once: true });
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } finally {
-    window.clearTimeout(timer);
-    options.signal?.removeEventListener('abort', abortFromCaller);
-  }
-};
+export const OSM_CATEGORIES = Object.freeze([
+  'hospital', 'police', 'fire', 'pharmacy', 'ambulance', 'clinic',
+  'doctors', 'shelter', 'women_safety', 'blood_bank', 'emergency_phone'
+]);
 
 const detectCategory = (tags = {}) => {
   const name = String(tags.name || '').toLowerCase();
@@ -48,131 +39,118 @@ const detectCategory = (tags = {}) => {
 
 const firstValue = (...values) => values.find((value) => value !== undefined && value !== null && String(value).trim()) || NA;
 const buildAddress = (tags = {}) => {
-  const houseAndStreet = [tags['addr:housenumber'], tags['addr:street']].filter(Boolean).join(' ');
-  return firstValue(tags['addr:full'], [houseAndStreet, tags['addr:suburb'], tags['addr:city'], tags['addr:state'], tags['addr:postcode']].filter(Boolean).join(', '), tags.description);
+  const street = [tags['addr:housenumber'], tags['addr:street']].filter(Boolean).join(' ');
+  return firstValue(tags['addr:full'], [street, tags['addr:suburb'], tags['addr:city'], tags['addr:state'], tags['addr:postcode']].filter(Boolean).join(', '), tags.description);
 };
 
 export const normalizeOsmElement = (element, origin) => {
   const latitude = Number(element.lat ?? element.center?.lat);
   const longitude = Number(element.lon ?? element.center?.lon);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-
   const tags = element.tags || {};
-  const categoryId = detectCategory(tags);
-  const metadata = getCategoryMetadata(categoryId);
+  const metadata = getCategoryMetadata(detectCategory(tags));
   const distance = calculateDistanceMeters(origin, { latitude, longitude });
   const placeId = `osm-${element.type}-${element.id}`;
   const openingHours = firstValue(tags.opening_hours);
   const openNow = openingHours === '24/7' ? true : NA;
-  const updatedAt = firstValue(element.timestamp, tags['check_date'], tags['survey:date']);
-
   return {
-    id: placeId,
-    osmId: `${element.type}/${element.id}`,
-    placeId,
+    id: placeId, osmId: `${element.type}/${element.id}`, placeId,
     name: firstValue(tags.name, tags.operator, metadata.label),
-    category: metadata.label,
-    categoryLabel: metadata.label,
-    categoryId: metadata.id,
-    filterId: metadata.filterId,
-    latitude,
-    longitude,
-    address: buildAddress(tags),
+    category: metadata.label, categoryLabel: metadata.label, categoryId: metadata.id, filterId: metadata.filterId,
+    latitude, longitude, address: buildAddress(tags),
     city: firstValue(tags['addr:city'], tags['addr:town'], tags['addr:village']),
-    state: firstValue(tags['addr:state']),
-    country: firstValue(tags['addr:country']),
-    postalCode: firstValue(tags['addr:postcode']),
+    state: firstValue(tags['addr:state']), country: firstValue(tags['addr:country']), postalCode: firstValue(tags['addr:postcode']),
     phone: firstValue(tags.phone, tags['contact:phone'], tags['contact:mobile']),
-    website: firstValue(tags.website, tags['contact:website']),
-    openingHours,
-    isOpen: openNow,
-    openNow,
-    rating: NA,
-    reviewCount: NA,
-    totalReviews: NA,
-    distance,
-    distanceMeters: distance,
-    distanceLabel: formatDistance(distance),
-    icon: metadata.icon,
-    favorite: false,
-    source: 'OpenStreetMap',
-    updatedAt,
-    fetchedAt: Date.now(),
-    color: metadata.color,
-    markerLabel: metadata.markerLabel,
+    website: firstValue(tags.website, tags['contact:website']), openingHours, isOpen: openNow, openNow,
+    rating: NA, reviewCount: NA, totalReviews: NA,
+    distance, distanceMeters: distance, distanceLabel: formatDistance(distance), icon: metadata.icon, favorite: false,
+    source: 'OpenStreetMap', updatedAt: firstValue(element.timestamp, tags['check_date'], tags['survey:date']), fetchedAt: Date.now(),
+    color: metadata.color, markerLabel: metadata.markerLabel,
     googleMapsLink: `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`
   };
 };
 
-const cacheKey = (latitude, longitude, radius, categories) => [
-  Number(latitude).toFixed(4), Number(longitude).toFixed(4), radius, [...categories].sort().join(',')
-].join(':');
-
-const requestOverpass = async (query, { signal } = {}) => {
-  let lastError;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
-    if (signal?.aborted) throw new DOMException('Request aborted', 'AbortError');
-    const endpoint = OVERPASS_ENDPOINTS[Math.min(attempt, OVERPASS_ENDPOINTS.length - 1)];
-    try {
-      const response = await fetchWithTimeout(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-        body: new URLSearchParams({ data: query }),
-        signal
-      });
-      if (!response.ok) throw new Error(`OpenStreetMap service returned ${response.status}.`);
-      return await response.json();
-    } catch (error) {
-      if (signal?.aborted) throw error;
-      lastError = error;
-      if (attempt < MAX_ATTEMPTS - 1) await sleep(350 * (attempt + 1));
-    }
-  }
-  if (isAbortError(lastError)) throw new Error('OpenStreetMap request timed out. Please retry.');
-  throw new Error(lastError?.message || 'OpenStreetMap services are temporarily unavailable.');
-};
-
-export const searchNearbyServices = async ({ latitude, longitude, radius = 5000, categories, force = false, signal } = {}) => {
-  const safeRadius = validateSearchRadius(radius);
-  const requested = categories?.length ? categories : [
-    'hospital', 'police', 'fire', 'pharmacy', 'ambulance', 'blood_bank',
-    'women_safety', 'shelter', 'clinic', 'doctors', 'emergency_phone'
-  ];
-  const key = cacheKey(latitude, longitude, safeRadius, requested);
-  const cached = responseCache.get(key);
-  if (!force && cached && Date.now() - cached.savedAt < CACHE_TTL_MS) return cached.value;
-
-  const query = buildOverpassQuery({ latitude, longitude, radius: safeRadius, categories: requested });
-  const data = await requestOverpass(query, { signal });
-  const origin = { latitude, longitude };
+const normalizePayload = (data, origin) => {
   const unique = new Map();
   (data.elements || []).forEach((element) => {
     const service = normalizeOsmElement(element, origin);
     if (service) unique.set(service.placeId, service);
   });
-  const services = [...unique.values()].sort((a, b) => (a.distanceMeters ?? Infinity) - (b.distanceMeters ?? Infinity));
-  const value = { services, warnings: [], source: 'OpenStreetMap', fetchedAt: Date.now() };
-  responseCache.set(key, { savedAt: Date.now(), value });
-  return value;
+  return [...unique.values()].sort((a, b) => (a.distanceMeters ?? Infinity) - (b.distanceMeters ?? Infinity));
+};
+
+export const getCachedCategoryServices = ({ latitude, longitude, radius, category, allowStale = true }) => {
+  const key = nearbyCacheKey({ latitude, longitude, radius, category });
+  const entry = getCacheEntry(key, { allowStale });
+  return entry ? { ...entry.value, stale: entry.stale, fromCache: true } : null;
+};
+
+const fetchCategory = async ({ latitude, longitude, radius, category, force = false, signal, priority = 0 }) => {
+  const safeRadius = validateSearchRadius(radius);
+  const key = nearbyCacheKey({ latitude, longitude, radius: safeRadius, category });
+  const cached = getCacheEntry(key);
+  if (!force && cached) return { ...cached.value, fromCache: true, stale: false };
+
+  return enqueueRequest(key, () => withRetry(async () => {
+    const server = getHealthiestServer();
+    const startedAt = now();
+    recordRequest();
+    try {
+      const query = buildOptimizedCategoryQuery({ latitude, longitude, radius: safeRadius, category });
+      const response = await fetchWithTimeout(server.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', Accept: 'application/json' },
+        body: new URLSearchParams({ data: query }),
+        signal
+      }, REQUEST_TIMEOUT_MS);
+      if (!response.ok) throw new Error(`OpenStreetMap server returned ${response.status}.`);
+      const data = await response.json();
+      const duration = elapsed(startedAt);
+      recordServerSuccess(server.url, duration);
+      const services = normalizePayload(data, { latitude, longitude });
+      const value = { services, category, radius: safeRadius, server: server.url, fetchedAt: Date.now() };
+      setCacheEntry(key, value);
+      recordSuccess({ duration, bytes: responseBytes(response, data), category });
+      return { ...value, fromCache: false, stale: false };
+    } catch (error) {
+      if (!signal?.aborted) {
+        recordServerFailure(server.url);
+        recordFailure();
+      }
+      throw error;
+    }
+  }, { signal }), { signal, priority });
+};
+
+export const searchNearbyServices = async ({ latitude, longitude, radius = 5000, categories = OSM_CATEGORIES, force = false, signal, priority = 0 } = {}) => {
+  const results = await Promise.allSettled(categories.map((category, index) => fetchCategory({
+    latitude, longitude, radius, category, force, signal, priority: priority || categories.length - index
+  })));
+  const services = new Map();
+  const warnings = [];
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') result.value.services.forEach((service) => services.set(service.placeId, service));
+    else if (result.reason?.name !== 'AbortError') warnings.push(`${categories[index]} unavailable.`);
+  });
+  return { services: [...services.values()], warnings, source: 'OpenStreetMap', fetchedAt: Date.now() };
 };
 
 export const fetchNearbyServices = (latitude, longitude, options = {}) => searchNearbyServices({ latitude, longitude, ...options });
-const categoryFetcher = (category) => (latitude, longitude, options = {}) => searchNearbyServices({ latitude, longitude, ...options, categories: [category] });
+const categoryFetcher = (category) => (latitude, longitude, options = {}) => fetchCategory({ latitude, longitude, radius: options.radius || 5000, category, ...options });
 export const getNearbyHospitals = categoryFetcher('hospital');
-export const getNearbyPolice = categoryFetcher('police');
-export const getNearbyFire = categoryFetcher('fire');
+export const getNearbyPoliceStations = categoryFetcher('police');
+export const getNearbyFireStations = categoryFetcher('fire');
 export const getNearbyPharmacies = categoryFetcher('pharmacy');
-export const getNearbyAmbulance = categoryFetcher('ambulance');
+export const getNearbyAmbulanceStations = categoryFetcher('ambulance');
 export const getNearbyBloodBanks = categoryFetcher('blood_bank');
 export const getNearbyWomenSafetyCenters = categoryFetcher('women_safety');
 export const getNearbyShelters = categoryFetcher('shelter');
 export const getNearbyClinics = categoryFetcher('clinic');
 export const getNearbyDoctors = categoryFetcher('doctors');
 export const getNearbyEmergencyPhones = categoryFetcher('emergency_phone');
-// Descriptive aliases keep the service API explicit for feature callers.
-export const getNearbyPoliceStations = getNearbyPolice;
-export const getNearbyFireStations = getNearbyFire;
-export const getNearbyAmbulanceStations = getNearbyAmbulance;
+export const getNearbyPolice = getNearbyPoliceStations;
+export const getNearbyFire = getNearbyFireStations;
+export const getNearbyAmbulance = getNearbyAmbulanceStations;
 
 export const reverseGeocode = async (latitude, longitude, { signal } = {}) => {
   const url = new URL(`${NOMINATIM_ENDPOINT}/reverse`);
@@ -182,5 +160,3 @@ export const reverseGeocode = async (latitude, longitude, { signal } = {}) => {
   const data = await response.json();
   return { displayName: data.display_name || NA, address: data.address || {}, source: 'OpenStreetMap Nominatim' };
 };
-
-export const clearOsmCache = () => responseCache.clear();

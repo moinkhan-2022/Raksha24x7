@@ -1,4 +1,5 @@
 export const ALLOWED_SEARCH_RADII = Object.freeze([500, 1000, 2000, 5000, 10000, 20000]);
+const QUERY_RADII = new Set([...ALLOWED_SEARCH_RADII, 8000, 15000]);
 
 export const OVERPASS_CATEGORY_SELECTORS = Object.freeze({
   hospital: ['["amenity"="hospital"]'],
@@ -21,7 +22,7 @@ export const OVERPASS_CATEGORY_SELECTORS = Object.freeze({
 
 export const validateSearchRadius = (radius = 5000) => {
   const numericRadius = Number(radius);
-  if (!ALLOWED_SEARCH_RADII.includes(numericRadius)) {
+  if (!QUERY_RADII.has(numericRadius)) {
     throw new RangeError(`Radius must be one of: ${ALLOWED_SEARCH_RADII.join(', ')} metres.`);
   }
   return numericRadius;

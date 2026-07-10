@@ -1,5 +1,6 @@
 const CACHE_DURATION_MS = 10 * 60 * 1000;
 const cache = new Map();
+const STORAGE_KEY = 'raksha_nearby_environment';
 
 const cacheKey = (latitude, longitude) => `${Number(latitude).toFixed(2)},${Number(longitude).toFixed(2)}`;
 
@@ -30,10 +31,14 @@ export const airQualityStatus = (aqi) => {
 
 export const getEnvironmentData = async (latitude, longitude, { signal, force = false } = {}) => {
   const key = cacheKey(latitude, longitude);
-  const cached = cache.get(key);
+  let cached = cache.get(key);
+  if (!cached && typeof window !== 'undefined') {
+    try { cached = JSON.parse(window.localStorage.getItem(`${STORAGE_KEY}:${key}`)); } catch { cached = null; }
+    if (cached) cache.set(key, cached);
+  }
   if (!force && cached && Date.now() - cached.timestamp < CACHE_DURATION_MS) return cached.data;
 
-  const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=auto`;
+  const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m&daily=sunrise,sunset,uv_index_max,precipitation_probability_max&forecast_days=1&timezone=auto`;
   const airUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${latitude}&longitude=${longitude}&current=us_aqi&timezone=auto`;
   const [weatherResult, airResult] = await Promise.allSettled([
     fetchJson(weatherUrl, signal),
@@ -49,14 +54,21 @@ export const getEnvironmentData = async (latitude, longitude, { signal, force = 
   const data = {
     weather: weatherCurrent ? {
       temperature: weatherCurrent.temperature_2m,
+      feelsLike: weatherCurrent.apparent_temperature,
       humidity: weatherCurrent.relative_humidity_2m,
       weatherCode: weatherCurrent.weather_code,
       condition: weatherCondition(weatherCurrent.weather_code),
-      windSpeed: weatherCurrent.wind_speed_10m
+      windSpeed: weatherCurrent.wind_speed_10m,
+      rainChance: weatherResult.value.daily?.precipitation_probability_max?.[0],
+      uvIndex: weatherResult.value.daily?.uv_index_max?.[0],
+      sunrise: weatherResult.value.daily?.sunrise?.[0],
+      sunset: weatherResult.value.daily?.sunset?.[0],
+      updatedAt: Date.now()
     } : null,
     airQuality: airCurrent && Number.isFinite(airCurrent.us_aqi) ? {
       aqi: airCurrent.us_aqi,
-      status: airQualityStatus(airCurrent.us_aqi)
+      status: airQualityStatus(airCurrent.us_aqi),
+      updatedAt: Date.now()
     } : null,
     warnings: [
       weatherResult.status === 'rejected' ? 'Weather unavailable.' : null,
@@ -64,6 +76,9 @@ export const getEnvironmentData = async (latitude, longitude, { signal, force = 
     ].filter(Boolean)
   };
   cache.set(key, { timestamp: Date.now(), data });
+  if (typeof window !== 'undefined') {
+    try { window.localStorage.setItem(`${STORAGE_KEY}:${key}`, JSON.stringify({ timestamp: Date.now(), data })); } catch { /* cache is optional */ }
+  }
   return data;
 };
 

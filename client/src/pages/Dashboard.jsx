@@ -1,83 +1,120 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { LifeBuoy, LocateFixed, Map, MapPinned, PhoneCall, ShieldCheck, Users } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import {
+  Ambulance, CloudSun, ContactRound, Flame, Hospital, LocateFixed, MapPinned,
+  Moon, PhoneCall, ShieldCheck, Siren, Sun
+} from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
-import { useAuth } from '../context/AuthContext';
 import Toast from '../components/Toast';
-import sosService from '../services/sosService';
 import SOSCountdownModal from '../components/SOSCountdownModal';
-import locationService from '../services/locationService';
 import EmergencyNumbersDashboardCard from '../components/EmergencyNumbersDashboardCard';
+import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
+import { buildSosNotification } from '../services/emergencyNotificationService';
+import sosService from '../services/sosService';
+import locationService from '../services/locationService';
+import { getEnvironmentData } from '../services/environmentService';
 
-const cards = [
-  { icon: LifeBuoy, title: 'SOS', subtitle: 'Trigger immediate emergency alert' },
-  { icon: LocateFixed, title: 'Live Location', subtitle: 'Share real-time location with contacts', path: '/live-location' },
-  { icon: Map, title: 'Google Maps', subtitle: 'View your current location on an interactive map', path: '/google-map' },
-  { icon: Users, title: 'Contacts', subtitle: 'Manage emergency contact list' },
-  { icon: MapPinned, title: 'Nearby Services', subtitle: 'Locate hospitals and police nearby', path: '/nearby-services' },
-  { icon: PhoneCall, title: 'Emergency Numbers', subtitle: 'Quick access to helplines', path: '/emergency-numbers' },
-  { icon: ShieldCheck, title: 'Safety Tips', subtitle: 'Read practical safety guidance' }
-];
+const THEME_KEY = 'raksha_theme';
 
-function CardSkeleton() { return <div className="h-28 animate-pulse rounded-2xl border border-white/10 bg-white/5" />; }
+const greeting = (hour) => (hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening');
+const coordinatesText = (location) => (location ? `${Number(location.latitude).toFixed(4)}, ${Number(location.longitude).toFixed(4)}` : 'Location updating');
+
+const applyThemePreference = (theme) => {
+  const safeTheme = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.dataset.rakshaTheme = safeTheme;
+  document.documentElement.style.colorScheme = safeTheme;
+};
 
 function Dashboard() {
   const { user } = useAuth();
+  const { emergencyNotify } = useNotifications();
   const navigate = useNavigate();
+  const location = useLocation();
+  const shortcutHandledRef = useRef(false);
   const [toast, setToast] = useState('');
-  const [latest, setLatest] = useState(null);
-  const [total, setTotal] = useState(0);
   const [countOpen, setCountOpen] = useState(false);
   const [count, setCount] = useState(5);
   const [sending, setSending] = useState(false);
+  const [now, setNow] = useState(() => new Date());
+  const [theme, setTheme] = useState(() => localStorage.getItem(THEME_KEY) || 'dark');
+  const [currentLocation, setCurrentLocation] = useState(null);
   const [latestLocation, setLatestLocation] = useState(null);
-  const timerRef = useRef(null);
-
-  const loadLatest = async () => {
-    try {
-      const { data } = await sosService.latest();
-      setLatest(data.item || null);
-      setTotal(data.total || 0);
-    } catch {
-      // silent
-    }
-  };
+  const [environment, setEnvironment] = useState({ weather: null, airQuality: null });
+  const [environmentLoading, setEnvironmentLoading] = useState(false);
 
   useEffect(() => {
-    loadLatest();
-    if (!user?.isGuest) {
-      locationService.getLatestLocation()
-        .then(({ data }) => setLatestLocation(data.location || null))
-        .catch(() => {});
-    }
-    return () => clearInterval(timerRef.current);
+    applyThemePreference(theme);
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
+
+  useEffect(() => {
+    const clock = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(clock);
+  }, []);
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (position) => setCurrentLocation({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        timestamp: Date.now()
+      }),
+      () => {},
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  }, []);
+
+  useEffect(() => {
+    if (user?.isGuest) return;
+    locationService.getLatestLocation()
+      .then((response) => setLatestLocation(response.data.location || null))
+      .catch(() => {});
   }, [user?.isGuest]);
 
-  const cancelCountdown = () => {
-    clearInterval(timerRef.current);
-    setCountOpen(false);
-    setCount(5);
-    setToast('SOS cancelled');
-  };
+  const weatherLocation = currentLocation || latestLocation;
+  useEffect(() => {
+    if (!weatherLocation || !navigator.onLine) return undefined;
+    const controller = new AbortController();
+    setEnvironmentLoading(true);
+    getEnvironmentData(weatherLocation.latitude, weatherLocation.longitude, { signal: controller.signal })
+      .then((data) => setEnvironment({ weather: data.weather, airQuality: data.airQuality }))
+      .catch(() => {})
+      .finally(() => { if (!controller.signal.aborted) setEnvironmentLoading(false); });
+    return () => controller.abort();
+  }, [weatherLocation?.latitude, weatherLocation?.longitude]);
 
-  const triggerSos = () => {
+  const notifications = useMemo(() => [
+    currentLocation && {
+      id: 'location',
+      title: 'Location ready',
+      message: `Accuracy approximately ${Math.round(currentLocation.accuracy || 0)} metres.`,
+      read: false
+    }
+  ].filter(Boolean), [currentLocation]);
+
+  const triggerSos = useCallback(() => {
     if (sending || countOpen) return;
-    const ok = window.confirm('Are you sure you want to send an emergency alert?');
-    if (!ok) return;
-
+    if (!window.confirm('Are you sure you want to send an emergency alert?')) return;
     setCountOpen(true);
     setCount(5);
-    timerRef.current = setInterval(() => {
-      setCount((c) => {
-        if (c <= 1) {
-          clearInterval(timerRef.current);
-          return 0;
-        }
-        return c - 1;
-      });
-    }, 1000);
-  };
+  }, [countOpen, sending]);
+
+  useEffect(() => {
+    if (shortcutHandledRef.current) return;
+    if (new URLSearchParams(location.search).get('sos') !== 'true') return;
+    shortcutHandledRef.current = true;
+    triggerSos();
+  }, [location.search, triggerSos]);
+
+  useEffect(() => {
+    if (!countOpen || count <= 0) return undefined;
+    const timer = window.setTimeout(() => setCount((value) => value - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [count, countOpen]);
 
   useEffect(() => {
     if (!countOpen || count !== 0) return;
@@ -85,90 +122,179 @@ function Dashboard() {
       try {
         setSending(true);
         if (!navigator.geolocation) throw new Error('Geolocation is not supported by your browser');
-
-        const position = await new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 });
-        });
-
-        const payload = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          timestamp: new Date().toISOString()
-        };
-
-        await sosService.send(payload);
+        const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 }));
+        const payload = { latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy: position.coords.accuracy, timestamp: new Date().toISOString() };
+        const { data } = await sosService.send(payload);
+        const locationLink = data?.sos?.googleMapLink || `https://maps.google.com/?q=${payload.latitude},${payload.longitude}`;
+        setCurrentLocation(payload);
+        emergencyNotify(buildSosNotification({
+          userName: user?.name,
+          locationLink,
+          emergencyStatus: data?.sos?.status || 'Active'
+        }));
         setToast('SOS alert sent successfully');
-        setCountOpen(false);
-        setCount(5);
-        await loadLatest();
-      } catch (e) {
-        const geoError = e?.code === 1 ? 'Location permission denied' : e?.message;
-        setToast(geoError || e.response?.data?.message || 'Failed to send SOS');
-        setCountOpen(false);
-        setCount(5);
+      } catch (error) {
+        setToast(error?.code === 1 ? 'Location permission denied' : error?.response?.data?.message || error?.message || 'Failed to send SOS');
       } finally {
         setSending(false);
+        setCountOpen(false);
+        setCount(5);
       }
     };
     send();
-  }, [countOpen, count]);
+  }, [count, countOpen, emergencyNotify, user?.name]);
+
+  const cancelCountdown = () => {
+    setCountOpen(false);
+    setCount(5);
+    setToast('SOS cancelled');
+  };
+
+  const callEmergency = (number) => {
+    window.location.href = `tel:${number}`;
+  };
+
+  const toggleTheme = () => setTheme((value) => (value === 'dark' ? 'light' : 'dark'));
+
+  const quickActions = [
+    { label: 'SOS', icon: Siren, color: 'bg-red-600 hover:bg-red-500', action: triggerSos },
+    { label: 'Live Location', icon: LocateFixed, color: 'bg-cyan-600 hover:bg-cyan-500', action: () => navigate('/live-location') },
+    { label: 'Google Maps', icon: MapPinned, color: 'bg-sky-600 hover:bg-sky-500', action: () => navigate('/google-map') },
+    { label: 'Nearby Services', icon: MapPinned, color: 'bg-emerald-600 hover:bg-emerald-500', action: () => navigate('/nearby-services') },
+    { label: 'Emergency Numbers', icon: PhoneCall, color: 'bg-amber-600 hover:bg-amber-500', action: () => navigate('/emergency-numbers') },
+    { label: 'Hospitals', icon: Hospital, color: 'bg-rose-600 hover:bg-rose-500', action: () => navigate('/nearby-services') },
+    { label: 'Police', icon: ShieldCheck, color: 'bg-blue-600 hover:bg-blue-500', action: () => callEmergency('112') },
+    { label: 'Fire', icon: Flame, color: 'bg-orange-600 hover:bg-orange-500', action: () => callEmergency('101') },
+    { label: 'Ambulance', icon: Ambulance, color: 'bg-violet-600 hover:bg-violet-500', action: () => callEmergency('108') },
+    { label: 'Emergency Contacts', icon: ContactRound, color: 'bg-fuchsia-600 hover:bg-fuchsia-500', action: () => navigate('/emergency-contacts') }
+  ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950">
-      <Navbar dashboard />
-      <Toast message={toast} type={toast.toLowerCase().includes('failed') || toast.toLowerCase().includes('denied') ? 'error' : 'success'} />
+    <div className={`min-h-screen transition-colors duration-300 ${theme === 'light' ? 'bg-slate-50 text-slate-950' : 'bg-slate-950 text-white'}`}>
+      <Navbar dashboard notifications={notifications} />
+      <Toast message={toast} type={/failed|denied|unavailable/i.test(toast) ? 'error' : 'success'} />
       <SOSCountdownModal open={countOpen} count={count} onCancel={cancelCountdown} />
 
-      <main className="mx-auto max-w-7xl px-4 py-6 md:px-6">
-        <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
-          <h1 className="text-2xl font-bold text-white">Welcome, {user?.name || 'User'}</h1>
-          <p className="mt-2 text-slate-300">Stay Safe. Emergency help is always available.</p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5 text-sm">
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-slate-200">Total SOS Sent: <span className="font-semibold text-white">{total}</span></div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-slate-200">Last SOS: <span className="font-semibold text-white">{latest ? new Date(latest.createdAt).toLocaleString() : 'N/A'}</span></div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-slate-200">Last Location: <span className="font-semibold text-white">{latest ? `${latest.latitude.toFixed(4)}, ${latest.longitude.toFixed(4)}` : 'N/A'}</span></div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-slate-200">Emergency Status: <span className="font-semibold text-white">{sending ? 'Sending...' : 'Ready'}</span></div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-slate-200">Last Known Location: <span className="font-semibold text-white">{latestLocation ? `${latestLocation.latitude.toFixed(4)}, ${latestLocation.longitude.toFixed(4)}` : 'N/A'}</span></div>
-          </div>
-        </motion.section>
+      <main className="mx-auto max-w-7xl px-4 py-5 md:px-6">
+        <section className={`rounded-3xl border p-5 shadow-sm transition-colors duration-300 md:p-6 ${theme === 'light' ? 'border-slate-200 bg-white' : 'border-white/10 bg-white/[0.05]'}`}>
+          <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-red-400">{greeting(now.getHours())}</p>
+              <h1 className={`mt-2 text-2xl font-bold sm:text-3xl ${theme === 'light' ? 'text-slate-950' : 'text-white'}`}>{user?.name || 'Raksha User'}</h1>
+              <p className={`mt-2 text-sm ${theme === 'light' ? 'text-slate-600' : 'text-slate-300'}`}>
+                {now.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · {now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </p>
+              <div className={`mt-3 flex flex-wrap gap-2 text-xs ${theme === 'light' ? 'text-slate-600' : 'text-slate-300'}`}>
+                <span className={`rounded-full px-3 py-1.5 ${theme === 'light' ? 'bg-slate-100' : 'bg-white/5'}`}>📍 {coordinatesText(weatherLocation)}</span>
+                <span className={`rounded-full px-3 py-1.5 ${theme === 'light' ? 'bg-slate-100' : 'bg-white/5'}`}>
+                  {environment.weather ? `${Math.round(environment.weather.temperature)}°C · ${environment.weather.condition}` : 'Weather updating'}
+                </span>
+              </div>
+            </div>
 
-        <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {cards.map((c) => (
-            <motion.button key={c.title} onClick={() => c.path && navigate(c.path)} whileHover={{ y: -4 }} className="w-full rounded-2xl border border-white/10 bg-white/5 p-5 text-left backdrop-blur-xl hover:bg-white/10">
-              <c.icon className="mb-3 h-6 w-6 text-blue-300" />
-              <p className="font-semibold text-white">{c.title}</p>
-              <p className="mt-1 text-sm text-slate-300">{c.title === 'Live Location' && latestLocation ? `Last: ${latestLocation.latitude.toFixed(4)}, ${latestLocation.longitude.toFixed(4)}` : c.subtitle}</p>
-            </motion.button>
-          ))}
-        </section>
-
-        <section className="mt-6"><EmergencyNumbersDashboardCard /></section>
-
-        <div className="flex justify-center py-8">
-          <motion.button onClick={triggerSos} disabled={sending || countOpen} whileHover={{ scale: 1.04 }} animate={{ boxShadow: ['0 0 20px rgba(239,68,68,.35)', '0 0 40px rgba(239,68,68,.6)', '0 0 20px rgba(239,68,68,.35)'] }} transition={{ duration: 1.6, repeat: Infinity }} className="relative h-44 w-44 rounded-full bg-gradient-to-br from-red-500 to-red-700 text-3xl font-extrabold text-white shadow-2xl disabled:opacity-60">
-            <span className="absolute inset-0 animate-ping rounded-full bg-red-500/20" />
-            <span className="relative">SOS</span>
-          </motion.button>
-        </div>
-
-        <section className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
-            <h3 className="text-lg font-semibold text-white">Recent Activity</h3>
-            <p className="mt-3 text-slate-300">{latest ? `Last SOS sent at ${new Date(latest.createdAt).toLocaleString()}` : 'No emergency activity yet.'}</p>
-          </div>
-          <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-6 backdrop-blur-xl">
-            <p className="text-red-100">If you feel unsafe, press SOS immediately.</p>
-            <div className="mt-3 flex flex-wrap gap-2 text-sm">
-              <a href="tel:112" className="rounded bg-red-700 px-3 py-1 text-white">Call 112</a>
-              {latest?.googleMapLink && <a href={latest.googleMapLink} target="_blank" rel="noreferrer" className="rounded bg-slate-700 px-3 py-1 text-white">Open Google Maps</a>}
-              {latest?.googleMapLink && <button onClick={() => navigator.clipboard.writeText(latest.googleMapLink)} className="rounded bg-slate-700 px-3 py-1 text-white">Copy Location</button>}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={toggleTheme}
+                aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                className={`rounded-xl border p-3 transition duration-300 ${theme === 'light' ? 'border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200' : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}`}
+              >
+                {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              </button>
+              <button type="button" onClick={triggerSos} disabled={sending || countOpen} className="rounded-xl bg-red-600 px-5 py-3 font-bold text-white shadow-sm hover:bg-red-500 disabled:opacity-50">
+                <Siren className="mr-2 inline h-5 w-5" />
+                {sending ? 'Sending…' : 'SOS'}
+              </button>
             </div>
           </div>
         </section>
 
-        <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><CardSkeleton /><CardSkeleton /><CardSkeleton /></section>
+        <section className="mt-5" aria-labelledby="quick-actions-heading">
+          <h2 id="quick-actions-heading" className={`mb-3 text-lg font-semibold ${theme === 'light' ? 'text-slate-950' : 'text-white'}`}>Quick Actions</h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {quickActions.map(({ label, icon: Icon, color, action }) => (
+              <motion.button
+                key={label}
+                type="button"
+                onClick={action}
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                className={`min-h-20 rounded-2xl p-3 text-left text-white shadow-sm transition ${color}`}
+              >
+                <Icon className="h-5 w-5" />
+                <p className="mt-3 text-xs font-semibold">{label}</p>
+              </motion.button>
+            ))}
+          </div>
+        </section>
+
+        <div className="mt-5 grid gap-5 lg:grid-cols-3">
+          <WeatherCard weather={environment.weather} loading={environmentLoading} theme={theme} />
+          <AQICard airQuality={environment.airQuality} loading={environmentLoading} theme={theme} />
+          <EmergencyNumbersDashboardCard theme={theme} />
+        </div>
       </main>
+    </div>
+  );
+}
+
+function WeatherCard({ weather, loading, theme }) {
+  const card = `rounded-2xl border p-5 shadow-sm ${theme === 'light' ? 'border-slate-200 bg-white' : 'border-white/10 bg-white/[0.05]'}`;
+  if (loading) return <section className={`${card} h-44 animate-pulse`} aria-label="Loading weather" />;
+  return (
+    <section className={card}>
+      <div className="flex items-center gap-3">
+        <CloudSun className="h-6 w-6 text-amber-400" />
+        <h2 className={`font-semibold ${theme === 'light' ? 'text-slate-950' : 'text-white'}`}>Weather</h2>
+      </div>
+      {weather ? (
+        <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <Metric label="Temperature" value={`${Math.round(weather.temperature)}°C`} theme={theme} />
+          <Metric label="Weather" value={weather.condition || 'Clear'} theme={theme} />
+          <Metric label="Humidity" value={`${Math.round(weather.humidity || 0)}%`} theme={theme} />
+          <Metric label="Wind Speed" value={`${Math.round(weather.windSpeed || 0)} km/h`} theme={theme} />
+        </div>
+      ) : (
+        <p className={`mt-4 text-sm ${theme === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>Enable location to load weather.</p>
+      )}
+    </section>
+  );
+}
+
+function AQICard({ airQuality, loading, theme }) {
+  const card = `rounded-2xl border p-5 shadow-sm ${theme === 'light' ? 'border-slate-200 bg-white' : 'border-white/10 bg-white/[0.05]'}`;
+  if (loading) return <section className={`${card} h-44 animate-pulse`} aria-label="Loading air quality" />;
+  const status = airQuality?.status || 'Unavailable';
+  const aqi = airQuality?.aqi ? Math.round(airQuality.aqi) : '—';
+  const color = status === 'Good' ? 'border-emerald-400 text-emerald-400' : status === 'Moderate' ? 'border-amber-400 text-amber-400' : 'border-red-400 text-red-400';
+  const advice = status === 'Good' ? 'Air quality is safe for normal activity.' : status === 'Moderate' ? 'Reduce long outdoor exposure if sensitive.' : status === 'Unavailable' ? 'AQI will appear when data is available.' : 'Limit outdoor exposure today.';
+  return (
+    <section className={card}>
+      <div className="flex items-center gap-3">
+        <ShieldCheck className="h-6 w-6 text-emerald-400" />
+        <h2 className={`font-semibold ${theme === 'light' ? 'text-slate-950' : 'text-white'}`}>Air Quality</h2>
+      </div>
+      <div className="mt-4 flex items-center gap-4">
+        <div className={`grid h-20 w-20 place-items-center rounded-full border-4 ${color}`}>
+          <div className="text-center">
+            <p className="text-2xl font-bold">{aqi}</p>
+            <p className="text-[10px] uppercase">AQI</p>
+          </div>
+        </div>
+        <div>
+          <p className={`text-sm font-semibold ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>{status}</p>
+          <p className={`mt-1 text-sm ${theme === 'light' ? 'text-slate-600' : 'text-slate-400'}`}>{advice}</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Metric({ label, value, theme }) {
+  return (
+    <div className={`rounded-xl p-3 ${theme === 'light' ? 'bg-slate-100' : 'bg-slate-950/35'}`}>
+      <p className={`text-xs ${theme === 'light' ? 'text-slate-500' : 'text-slate-500'}`}>{label}</p>
+      <p className={`mt-1 font-semibold ${theme === 'light' ? 'text-slate-950' : 'text-white'}`}>{value}</p>
     </div>
   );
 }
