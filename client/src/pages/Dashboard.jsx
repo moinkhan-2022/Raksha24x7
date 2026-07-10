@@ -16,16 +16,56 @@ import { buildSosNotification } from '../services/emergencyNotificationService';
 import sosService from '../services/sosService';
 import locationService from '../services/locationService';
 import { getEnvironmentData } from '../services/environmentService';
+import { reverseGeocode } from '../services/osmApi';
 
 const THEME_KEY = 'raksha_theme';
+const DASHBOARD_ADDRESS_CACHE_KEY = 'raksha_dashboard_address_cache';
+const SIGNIFICANT_LOCATION_DELTA = 0.001;
 
 const greeting = (hour) => (hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening');
-const coordinatesText = (location) => (location ? `${Number(location.latitude).toFixed(4)}, ${Number(location.longitude).toFixed(4)}` : 'Location updating');
+const shortAddressText = (address) => address || 'Current Location Available';
 
 const applyThemePreference = (theme) => {
   const safeTheme = theme === 'light' ? 'light' : 'dark';
   document.documentElement.dataset.rakshaTheme = safeTheme;
   document.documentElement.style.colorScheme = safeTheme;
+};
+
+const getCachedDashboardAddress = () => {
+  try {
+    return JSON.parse(localStorage.getItem(DASHBOARD_ADDRESS_CACHE_KEY));
+  } catch {
+    return null;
+  }
+};
+
+const saveCachedDashboardAddress = (value) => {
+  try {
+    localStorage.setItem(DASHBOARD_ADDRESS_CACHE_KEY, JSON.stringify(value));
+  } catch {
+    return undefined;
+  }
+};
+
+const hasMovedSignificantly = (previous, next) => {
+  if (!previous || !next) return true;
+  return Math.abs(Number(previous.latitude) - Number(next.latitude)) > SIGNIFICANT_LOCATION_DELTA
+    || Math.abs(Number(previous.longitude) - Number(next.longitude)) > SIGNIFICANT_LOCATION_DELTA;
+};
+
+const formatShortAddress = (result) => {
+  const address = result?.address || {};
+  const parts = [
+    address.building || address.amenity || address.office || address.shop || address.tourism || address.leisure || address.house_name || address.road,
+    address.neighbourhood || address.suburb || address.quarter || address.residential || address.city_district || address.village,
+    address.city || address.town || address.municipality || address.county
+  ]
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .filter((item, index, array) => array.findIndex((entry) => entry.toLowerCase() === item.toLowerCase()) === index)
+    .slice(0, 3);
+  if (parts.length) return parts.join('\n');
+  return String(result?.displayName || '').split(',').map((item) => item.trim()).filter(Boolean).slice(0, 3).join('\n');
 };
 
 function Dashboard() {
@@ -42,6 +82,9 @@ function Dashboard() {
   const [theme, setTheme] = useState(() => localStorage.getItem(THEME_KEY) || 'dark');
   const [currentLocation, setCurrentLocation] = useState(null);
   const [latestLocation, setLatestLocation] = useState(null);
+  const [currentAddress, setCurrentAddress] = useState(() => getCachedDashboardAddress()?.address || '');
+  const [locationPermission, setLocationPermission] = useState('checking');
+  const [addressLoading, setAddressLoading] = useState(false);
   const [environment, setEnvironment] = useState({ weather: null, airQuality: null });
   const [environmentLoading, setEnvironmentLoading] = useState(false);
   const [sosSession, setSosSession] = useState(null);
@@ -59,19 +102,32 @@ function Dashboard() {
     return () => window.clearInterval(clock);
   }, []);
 
-  useEffect(() => {
-    if (!navigator.geolocation) return;
+  const requestDashboardLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setLocationPermission('unsupported');
+      return;
+    }
+    setLocationPermission('checking');
     navigator.geolocation.getCurrentPosition(
-      (position) => setCurrentLocation({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        accuracy: position.coords.accuracy,
-        timestamp: Date.now()
-      }),
-      () => {},
+      (position) => {
+        setLocationPermission('granted');
+        setCurrentLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          timestamp: Date.now()
+        });
+      },
+      (error) => {
+        setLocationPermission(error?.code === 1 ? 'denied' : 'unavailable');
+      },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
   }, []);
+
+  useEffect(() => {
+    requestDashboardLocation();
+  }, [requestDashboardLocation]);
 
   useEffect(() => {
     if (user?.isGuest) return;
@@ -81,6 +137,31 @@ function Dashboard() {
   }, [user?.isGuest]);
 
   const weatherLocation = currentLocation || latestLocation;
+  useEffect(() => {
+    if (!weatherLocation || !navigator.onLine) return undefined;
+    const cached = getCachedDashboardAddress();
+    if (cached && !hasMovedSignificantly(cached, weatherLocation)) {
+      setCurrentAddress(cached.address || '');
+      return undefined;
+    }
+    const controller = new AbortController();
+    setAddressLoading(true);
+    reverseGeocode(weatherLocation.latitude, weatherLocation.longitude, { signal: controller.signal })
+      .then((result) => {
+        const address = formatShortAddress(result);
+        setCurrentAddress(address);
+        saveCachedDashboardAddress({
+          latitude: weatherLocation.latitude,
+          longitude: weatherLocation.longitude,
+          address,
+          updatedAt: new Date().toISOString()
+        });
+      })
+      .catch(() => setCurrentAddress('Current Location Available'))
+      .finally(() => { if (!controller.signal.aborted) setAddressLoading(false); });
+    return () => controller.abort();
+  }, [weatherLocation?.latitude, weatherLocation?.longitude]);
+
   useEffect(() => {
     if (!weatherLocation || !navigator.onLine) return undefined;
     const controller = new AbortController();
@@ -103,10 +184,15 @@ function Dashboard() {
 
   const triggerSos = useCallback(() => {
     if (sending || countOpen) return;
+    if (locationPermission !== 'granted' || !currentLocation) {
+      setToast('Location access is required before using SOS.');
+      requestDashboardLocation();
+      return;
+    }
     if (!window.confirm('Are you sure you want to send an emergency alert?')) return;
     setCountOpen(true);
     setCount(5);
-  }, [countOpen, sending]);
+  }, [countOpen, currentLocation, locationPermission, requestDashboardLocation, sending]);
 
   useEffect(() => {
     if (shortcutHandledRef.current) return;
@@ -134,7 +220,7 @@ function Dashboard() {
           longitude: position.coords.longitude,
           accuracy: position.coords.accuracy,
           timestamp: new Date().toISOString(),
-          address: 'Address unavailable'
+          address: shortAddressText(currentAddress)
         };
         const locationLink = `https://maps.google.com/?q=${payload.latitude},${payload.longitude}`;
         setCurrentLocation(payload);
@@ -152,7 +238,7 @@ function Dashboard() {
       }
     };
     send();
-  }, [count, countOpen, getProfile, user]);
+  }, [count, countOpen, currentAddress, getProfile, user]);
 
   const openWhatsApp = (contact) => {
     if (!sosSession) return;
@@ -230,9 +316,9 @@ function Dashboard() {
   };
 
   const toggleTheme = () => setTheme((value) => (value === 'dark' ? 'light' : 'dark'));
+  const locationBlocked = ['denied', 'unavailable', 'unsupported'].includes(locationPermission);
 
   const quickActions = [
-    { label: 'SOS', icon: Siren, color: 'bg-red-600 hover:bg-red-500', action: triggerSos },
     { label: 'Live Location', icon: LocateFixed, color: 'bg-cyan-600 hover:bg-cyan-500', action: () => navigate('/live-location') },
     { label: 'Google Maps', icon: MapPinned, color: 'bg-sky-600 hover:bg-sky-500', action: () => navigate('/google-map') },
     { label: 'Nearby Services', icon: MapPinned, color: 'bg-emerald-600 hover:bg-emerald-500', action: () => navigate('/nearby-services') },
@@ -247,7 +333,7 @@ function Dashboard() {
   return (
     <div className={`min-h-screen transition-colors duration-300 ${theme === 'light' ? 'bg-slate-50 text-slate-950' : 'bg-slate-950 text-white'}`}>
       <Navbar dashboard notifications={notifications} />
-      <Toast message={toast} type={/failed|denied|unavailable/i.test(toast) ? 'error' : 'success'} />
+      <Toast message={toast} type={/failed|denied|unavailable|required/i.test(toast) ? 'error' : 'success'} />
       <SOSCountdownModal open={countOpen} count={count} onCancel={cancelCountdown} />
       <WhatsAppSosSheet
         session={sosSession}
@@ -272,7 +358,9 @@ function Dashboard() {
                 {now.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · {now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </p>
               <div className={`mt-3 flex flex-wrap gap-2 text-xs ${theme === 'light' ? 'text-slate-600' : 'text-slate-300'}`}>
-                <span className={`rounded-full px-3 py-1.5 ${theme === 'light' ? 'bg-slate-100' : 'bg-white/5'}`}>📍 {coordinatesText(weatherLocation)}</span>
+                <span className={`whitespace-pre-line rounded-full px-3 py-1.5 ${theme === 'light' ? 'bg-slate-100' : 'bg-white/5'}`}>
+                  📍 {addressLoading ? 'Resolving current address...' : shortAddressText(currentAddress)}
+                </span>
                 <span className={`rounded-full px-3 py-1.5 ${theme === 'light' ? 'bg-slate-100' : 'bg-white/5'}`}>
                   {environment.weather ? `${Math.round(environment.weather.temperature)}°C · ${environment.weather.condition}` : 'Weather updating'}
                 </span>
@@ -288,12 +376,21 @@ function Dashboard() {
               >
                 {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
               </button>
-              <button type="button" onClick={triggerSos} disabled={sending || countOpen} className="rounded-xl bg-red-600 px-5 py-3 font-bold text-white shadow-sm hover:bg-red-500 disabled:opacity-50">
+              <button type="button" onClick={triggerSos} disabled={sending || countOpen || locationPermission !== 'granted' || !currentLocation} className="rounded-xl bg-red-600 px-5 py-3 font-bold text-white shadow-sm hover:bg-red-500 disabled:opacity-50">
                 <Siren className="mr-2 inline h-5 w-5" />
                 {sending ? 'Sending…' : 'SOS'}
               </button>
             </div>
           </div>
+          {locationBlocked && (
+            <div className={`mt-5 rounded-2xl border p-4 ${theme === 'light' ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-amber-400/20 bg-amber-500/10 text-amber-100'}`}>
+              <p className="font-semibold">Location access is required for Raksha24x7.</p>
+              <p className={`mt-1 text-sm ${theme === 'light' ? 'text-amber-800' : 'text-amber-100/80'}`}>SOS, Nearby Services, Live Location and Emergency Assistance need your current location.</p>
+              <button type="button" onClick={requestDashboardLocation} className="mt-3 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500">
+                Grant Location Permission
+              </button>
+            </div>
+          )}
         </section>
 
         <section className="mt-5" aria-labelledby="quick-actions-heading">
@@ -333,30 +430,43 @@ const normalizeWhatsAppPhone = (phone = '') => {
 };
 
 const buildWhatsAppEmergencyMessage = ({ location, user }) => {
-  const mapsLink = `https://maps.google.com/?q=${location.latitude},${location.longitude}`;
-  return [
-    '🚨 EMERGENCY ALERT',
-    '',
-    'I need immediate help.',
-    '',
-    'My current location is:',
-    mapsLink,
-    '',
-    'Current Address:',
-    location.address || 'Address unavailable',
-    '',
-    'Coordinates:',
-    `${Number(location.latitude).toFixed(6)}, ${Number(location.longitude).toFixed(6)}`,
-    '',
-    'Time:',
-    new Date(location.timestamp || Date.now()).toLocaleString(),
-    '',
-    user?.phone ? `My phone: ${user.phone}` : '',
-    '',
-    'Please contact me immediately.',
-    '',
-    'Sent using Raksha24x7'
-  ].filter((line, index, lines) => line !== '' || lines[index - 1] !== '').join('\n');
+  const date = new Date(location.timestamp || Date.now());
+  const dateText = `${date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} • ${date.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }).toUpperCase()}`;
+  const latitude = Number(location.latitude).toFixed(6);
+  const longitude = Number(location.longitude).toFixed(6);
+  const mapsLink = `https://maps.google.com/?q=${latitude},${longitude}`;
+  const separator = '━━━━━━━━━━━━━━━━━━';
+  return `🚨 EMERGENCY ALERT
+
+⚠️ I need immediate help.
+
+${separator}
+
+📍 Current Address
+
+${location.address || 'Current Location Available'}
+
+${separator}
+
+🗺️ Google Maps
+
+${mapsLink}
+
+📍 Coordinates
+
+${latitude}, ${longitude}
+
+📞 Phone
+
+${user?.phone || 'Unavailable'}
+
+🕒 Time
+
+${dateText}
+
+${separator}
+
+Sent using Raksha24x7`;
 };
 
 function WhatsAppSosSheet({ session, statuses, pendingConfirm, saving, onClose, onManageContacts, onOpenWhatsApp, onMarkStatus, onCopy, onDone }) {
