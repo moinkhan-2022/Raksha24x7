@@ -167,10 +167,29 @@ export const emailTemplates = {
       securityText: 'If this was you, no action is needed. If not, change your password immediately.'
     })
   }),
-  emergencyAlert: ({ name }) => ({
+  emergencyAlert: ({ name, userName, userPhone, emergencyTime, emergencyType, address, latitude, longitude, accuracy, googleMapLink, directionsLink, liveTrackingLink, emergencyMessage, batteryLevel }) => ({
     subject: 'Raksha24x7 emergency alert',
-    text: 'Emergency alert template placeholder.',
-    html: baseEmailTemplate({ title: 'Emergency alert', name, intro: 'Emergency alert email support is reserved for a future module.' })
+    text: `SOS emergency alert from ${userName || 'Raksha24x7 user'}. Location: ${googleMapLink}. Live tracking: ${liveTrackingLink}.`,
+    html: baseEmailTemplate({
+      title: 'SOS Emergency Alert',
+      preheader: `${userName || 'A Raksha24x7 user'} needs immediate help.`,
+      name,
+      intro: `<strong style="color:#fecaca">${userName || 'A Raksha24x7 user'} has activated SOS and may need immediate assistance.</strong>`,
+      list: [
+        `Emergency type: ${emergencyType || 'SOS'}`,
+        `Phone number: ${userPhone || 'Unavailable'}`,
+        `Emergency time: ${emergencyTime || 'Unavailable'}`,
+        `Address: ${address || 'Unavailable'}`,
+        `Coordinates: ${latitude}, ${longitude}`,
+        accuracy ? `Accuracy: ${Math.round(Number(accuracy))} metres` : '',
+        batteryLevel !== null && batteryLevel !== undefined ? `Battery level: ${batteryLevel}%` : '',
+        emergencyMessage ? `Message: ${emergencyMessage}` : ''
+      ].filter(Boolean),
+      buttonText: 'Open Live Tracking',
+      buttonUrl: liveTrackingLink || googleMapLink,
+      note: `Open map: <a href="${googleMapLink}" style="color:#fb923c">${googleMapLink}</a>${directionsLink ? `<br/>Start navigation: <a href="${directionsLink}" style="color:#fb923c">${directionsLink}</a>` : ''}`,
+      securityText: 'This is an emergency communication from Raksha24x7. If you know the sender, contact them immediately and call local emergency services if needed.'
+    })
   }),
   weeklySafetyReport: ({ name }) => ({
     subject: 'Raksha24x7 weekly safety report',

@@ -12,6 +12,7 @@ import AuthStatusPage from './pages/AuthStatusPage';
 import EmergencyContactsPage from './pages/EmergencyContactsPage';
 import SosHistoryPage from './pages/SosHistoryPage';
 import LiveLocationPage from './pages/LiveLocationPage';
+import SosTrackingPage from './pages/SosTrackingPage';
 import { useAuth } from './context/AuthContext';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import PWAStatus from './components/PWAStatus';
@@ -105,6 +106,7 @@ function App() {
       <Route path="/auth/verification-failed" element={<AuthStatusPage />} />
       <Route path="/auth/forgot-password-success" element={<AuthStatusPage />} />
       <Route path="/auth/password-reset-success" element={<AuthStatusPage />} />
+      <Route path="/sos-tracking/:token" element={<SosTrackingPage />} />
         <Route path="/admin/login" element={<Suspense fallback={<PageSkeleton />}><AdminLoginPage /></Suspense>} />
         <Route path="/admin/dashboard" element={<AdminProtectedRoute><Suspense fallback={<PageSkeleton />}><AdminDashboardPage /></Suspense></AdminProtectedRoute>} />
         <Route path="/admin/users" element={<AdminProtectedRoute><Suspense fallback={<PageSkeleton />}><AdminUsersPage /></Suspense></AdminProtectedRoute>} />
