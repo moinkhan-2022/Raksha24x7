@@ -2,6 +2,9 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAdminAuth } from '../context/AdminAuthContext';
 
+const ADMIN_ROLES = ['super_admin', 'admin', 'moderator', 'support'];
+const hasUserAdminRole = (user) => ADMIN_ROLES.includes(String(user?.role || '').toLowerCase());
+
 function AdminProtectedRoute({ children }) {
   const location = useLocation();
   const { user, loading: userLoading } = useAuth();
@@ -11,7 +14,7 @@ function AdminProtectedRoute({ children }) {
     return <div className="grid min-h-screen place-items-center bg-slate-950 text-slate-300">Loading admin session...</div>;
   }
 
-  if (user && !user.isGuest && String(user.role || '').toLowerCase() !== 'admin' && !admin) {
+  if (user && !user.isGuest && !hasUserAdminRole(user) && !admin) {
     return <Navigate to="/dashboard" replace />;
   }
 

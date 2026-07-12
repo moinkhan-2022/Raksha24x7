@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { LockKeyhole, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, LockKeyhole, ShieldCheck } from 'lucide-react';
 import { useAdminAuth } from '../../context/AdminAuthContext';
 import { useAuth } from '../../context/AuthContext';
+
+const ADMIN_ROLES = ['super_admin', 'admin', 'moderator', 'support'];
+const hasUserAdminRole = (user) => ADMIN_ROLES.includes(String(user?.role || '').toLowerCase());
 
 function AdminLoginPage() {
   const { admin, loginAdmin } = useAdminAuth();
@@ -12,9 +15,10 @@ function AdminLoginPage() {
   const [form, setForm] = useState({ email: '', password: '', remember: false });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   if (admin) return <Navigate to="/admin/dashboard" replace />;
-  if (user && !user.isGuest && String(user.role || '').toLowerCase() !== 'admin') return <Navigate to="/dashboard" replace />;
+  if (user && !user.isGuest && !hasUserAdminRole(user)) return <Navigate to="/dashboard" replace />;
 
   const submit = async (event) => {
     event.preventDefault();
@@ -51,7 +55,12 @@ function AdminLoginPage() {
           </label>
           <label className="block">
             <span className="text-sm font-semibold text-slate-300">Password</span>
-            <input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-slate-950 px-4 text-white outline-none focus:border-red-400" placeholder="••••••••" />
+            <span className="relative mt-2 block">
+              <input type={showPassword ? 'text' : 'password'} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} className="h-12 w-full rounded-2xl border border-white/10 bg-slate-950 px-4 pr-12 text-white outline-none focus:border-red-400" placeholder="••••••••" />
+              <button type="button" onClick={() => setShowPassword((value) => !value)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl p-2 text-slate-400 hover:bg-white/10 hover:text-white" aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </span>
           </label>
           <div className="flex items-center justify-between text-sm">
             <label className="flex items-center gap-2 text-slate-300">

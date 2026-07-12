@@ -60,9 +60,14 @@ export const notificationApi = {
 };
 
 export const adminApi = {
-  login: (payload) => adminHttp.post('/login', payload),
-  logout: () => adminHttp.post('/logout'),
-  profile: () => adminHttp.get('/profile'),
+  login: (payload) => adminHttp.post('/auth/login', payload),
+  logout: () => adminHttp.post('/auth/logout'),
+  logoutAll: () => adminHttp.post('/auth/logout-all'),
+  profile: () => adminHttp.get('/auth/me'),
+  updateProfile: (payload) => adminHttp.patch('/auth/profile', payload),
+  changePassword: (payload) => adminHttp.patch('/auth/change-password', payload),
+  sessions: () => adminHttp.get('/auth/sessions'),
+  revokeSession: (id) => adminHttp.delete(`/auth/sessions/${id}`),
   dashboard: () => adminHttp.get('/dashboard'),
   settings: () => adminHttp.get('/settings'),
   updateSettings: (payload) => adminHttp.put('/settings', payload),

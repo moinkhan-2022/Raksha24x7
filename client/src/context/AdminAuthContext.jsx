@@ -7,7 +7,8 @@ const TOKEN_KEY = 'raksha_admin_token';
 const ADMIN_KEY = 'raksha_admin_user';
 const EXPIRY_KEY = 'raksha_admin_expires_at';
 
-const isAdmin = (admin) => String(admin?.role || '').toLowerCase() === 'admin';
+const ADMIN_ROLES = ['super_admin', 'admin', 'moderator', 'support'];
+const isAdmin = (admin) => ADMIN_ROLES.includes(String(admin?.role || '').toLowerCase());
 const expired = () => {
   const value = localStorage.getItem(EXPIRY_KEY);
   return value ? new Date(value).getTime() <= Date.now() : false;
@@ -52,7 +53,7 @@ export function AdminAuthProvider({ children }) {
     try {
       if (localStorage.getItem(TOKEN_KEY)) await adminApi.logout();
     } catch {
-      // Always clear local admin session.
+      return undefined;
     } finally {
       clearAdmin();
     }

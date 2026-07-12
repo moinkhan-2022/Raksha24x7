@@ -32,6 +32,9 @@ const loadAdminDashboardPage = () => import('./pages/admin/AdminDashboardPage');
 const loadAdminUsersPage = () => import('./pages/admin/AdminUsersPage');
 const loadAdminProfilePage = () => import('./pages/admin/AdminProfilePage');
 const loadAdminSettingsPage = () => import('./pages/admin/AdminSettingsPage');
+const loadAdminSessionsPage = () => import('./pages/admin/AdminSessionsPage');
+const loadAdminForbiddenPage = () => import('./pages/admin/AdminForbiddenPage');
+const loadAdminNotFoundPage = () => import('./pages/admin/AdminNotFoundPage');
 
 const GoogleMapPage = lazy(loadGoogleMapPage);
 const LoginPage = lazy(loadLoginPage);
@@ -47,6 +50,9 @@ const AdminDashboardPage = lazy(loadAdminDashboardPage);
 const AdminUsersPage = lazy(loadAdminUsersPage);
 const AdminProfilePage = lazy(loadAdminProfilePage);
 const AdminSettingsPage = lazy(loadAdminSettingsPage);
+const AdminSessionsPage = lazy(loadAdminSessionsPage);
+const AdminForbiddenPage = lazy(loadAdminForbiddenPage);
+const AdminNotFoundPage = lazy(loadAdminNotFoundPage);
 
 const LAST_ROUTE_KEY = 'raksha_last_route';
 const isStandaloneApp = () => window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
@@ -112,8 +118,11 @@ function App() {
         <Route path="/admin/dashboard" element={<AdminProtectedRoute><Suspense fallback={<PageSkeleton />}><AdminDashboardPage /></Suspense></AdminProtectedRoute>} />
         <Route path="/admin/users" element={<AdminProtectedRoute><Suspense fallback={<PageSkeleton />}><AdminUsersPage /></Suspense></AdminProtectedRoute>} />
         <Route path="/admin/profile" element={<AdminProtectedRoute><Suspense fallback={<PageSkeleton />}><AdminProfilePage /></Suspense></AdminProtectedRoute>} />
+        <Route path="/admin/sessions" element={<AdminProtectedRoute><Suspense fallback={<PageSkeleton />}><AdminSessionsPage /></Suspense></AdminProtectedRoute>} />
         <Route path="/admin/settings" element={<AdminProtectedRoute><Suspense fallback={<PageSkeleton />}><AdminSettingsPage /></Suspense></AdminProtectedRoute>} />
+        <Route path="/admin/403" element={<Suspense fallback={<PageSkeleton />}><AdminForbiddenPage /></Suspense>} />
         <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/admin/*" element={<Suspense fallback={<PageSkeleton />}><AdminNotFoundPage /></Suspense>} />
         <Route path="/" element={<HomeRoute user={user} />} />
         <Route path="/sos" element={<ProtectedRoute allowGuest><Navigate to="/dashboard?sos=true" replace /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute allowGuest><Suspense fallback={<PageSkeleton />}><Dashboard /></Suspense></ProtectedRoute>} />
