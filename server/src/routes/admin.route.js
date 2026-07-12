@@ -14,6 +14,15 @@ import {
   updateAdminSettings
 } from '../controllers/admin.controller.js';
 import {
+  getDashboardActivity,
+  getDashboardEmails,
+  getDashboardNotifications,
+  getDashboardOverview,
+  getDashboardSos,
+  getDashboardSystemHealth,
+  getDashboardUsers
+} from '../controllers/adminDashboard.controller.js';
+import {
   bulkAdminUserAction,
   deleteAdminUser,
   exportAdminUsers,
@@ -43,6 +52,13 @@ router.delete('/auth/sessions/:id', deleteAdminSession);
 router.get('/profile', getAdminProfile);
 router.patch('/profile', updateAdminProfile);
 router.get('/dashboard', getAdminDashboard);
+router.get('/dashboard/overview', getDashboardOverview);
+router.get('/dashboard/users', getDashboardUsers);
+router.get('/dashboard/sos', getDashboardSos);
+router.get('/dashboard/emails', getDashboardEmails);
+router.get('/dashboard/notifications', getDashboardNotifications);
+router.get('/dashboard/activity', getDashboardActivity);
+router.get('/dashboard/system-health', getDashboardSystemHealth);
 router.get('/settings', getAdminSettings);
 router.put('/settings', updateAdminSettings);
 router.get('/users/export', exportAdminUsers);
