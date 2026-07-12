@@ -1,7 +1,10 @@
 import axios from 'axios';
 
-const api = axios.create({ baseURL: '/api' });
-const adminHttp = axios.create({ baseURL: '/api/admin' });
+const apiOrigin = String(import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '').replace(/\/api$/, '');
+const apiBaseURL = apiOrigin ? `${apiOrigin}/api` : '/api';
+
+const api = axios.create({ baseURL: apiBaseURL });
+const adminHttp = axios.create({ baseURL: `${apiBaseURL}/admin` });
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('raksha_token');
