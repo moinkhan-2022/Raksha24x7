@@ -14,6 +14,7 @@ import {
 import { FirebaseAuthError, verifyGoogleIdToken } from '../services/firebaseAuth.service.js';
 import EmailVerificationToken from '../email/models/emailVerificationToken.model.js';
 import PasswordResetToken from '../email/models/passwordResetToken.model.js';
+import { validateStrongPassword } from '../utils/passwordPolicy.js';
 
 const VERIFICATION_EXPIRE_MS = 24 * 60 * 60 * 1000;
 const RESET_EXPIRE_MS = 30 * 60 * 1000;
@@ -227,13 +228,7 @@ export const login = async (req, res) => {
 
 export const googleSignIn = async (req, res) => {
   try {
-    console.log("========== GOOGLE LOGIN REQUEST ==========");
-    console.log("Request Body:", req.body);
-    console.log("Headers:", req.headers);
-    console.log("Google ID Token Present:", !!req.body.idToken);
-
     const { idToken } = req.body || {};
-    console.log("Starting Google token verification...");
     const decoded = await verifyGoogleIdToken(idToken);
     const firebaseUid = decoded.uid;
     const email = decoded.email?.toLowerCase().trim();
@@ -298,19 +293,6 @@ export const googleSignIn = async (req, res) => {
       needsPasswordSetup: Boolean(user.passwordSetupRequired)
     });
   } catch (error) {
-    console.error("========== GOOGLE LOGIN ERROR ==========");
-    console.error("Message:", error.message);
-    console.error("Name:", error.name);
-    console.error("Stack:", error.stack);
-
-    if (error.response) {
-      console.error("Response:", error.response.data);
-    }
-
-    if (error.errors) {
-      console.error("Errors:", error.errors);
-    }
-
     return res.status(500).json({
       success: false,
       message: "Google sign-in failed"
@@ -321,8 +303,8 @@ export const googleSignIn = async (req, res) => {
 export const setupPassword = async (req, res) => {
   try {
     const { password, confirmPassword } = req.body || {};
-    const strong = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
-    if (!strong.test(password || '')) return res.status(400).json({ success: false, message: 'Password must contain 8+ characters, uppercase, lowercase and number.' });
+    const passwordError = validateStrongPassword(password);
+    if (passwordError) return res.status(400).json({ success: false, message: passwordError });
     if (password !== confirmPassword) return res.status(400).json({ success: false, message: 'Passwords do not match.' });
 
     const user = await User.findById(req.user._id).select('+password');
@@ -525,10 +507,10 @@ export const resetPassword = async (req, res) => {
   try {
     const token = req.params.token || req.body?.token;
     const { password, confirmPassword } = req.body;
-    const strong = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
+    const passwordError = validateStrongPassword(password);
 
     if (!token) return res.status(400).json({ success: false, message: 'Reset token is required' });
-    if (!strong.test(password || '')) return res.status(400).json({ success: false, message: 'Weak password' });
+    if (passwordError) return res.status(400).json({ success: false, message: passwordError });
     if (password !== confirmPassword) return res.status(400).json({ success: false, message: 'Passwords do not match' });
 
     const user = await User.findOne({ resetPasswordToken: hashToken(token), resetPasswordExpire: { $gt: new Date() } }).select('+password +resetPasswordToken +resetPasswordExpire +passwordResetHistory +failedResetAttempts');
@@ -561,9 +543,9 @@ export const updateProfile = async (req, res) => { try { const user = await User
 export const changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword, confirmPassword } = req.body;
-    const strong = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
+    const passwordError = validateStrongPassword(newPassword);
     if (!currentPassword || !newPassword || !confirmPassword) return res.status(400).json({ success: false, message: 'All password fields are required' });
-    if (!strong.test(newPassword || '')) return res.status(400).json({ success: false, message: 'Password must contain 8+ characters, uppercase, lowercase, number and special character.' });
+    if (passwordError) return res.status(400).json({ success: false, message: passwordError });
     if (newPassword !== confirmPassword) return res.status(400).json({ success: false, message: 'Confirm Password must match Password' });
     if (newPassword === currentPassword) return res.status(400).json({ success: false, message: 'New password cannot be the same as your current password.' });
 

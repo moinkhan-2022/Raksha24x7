@@ -1,5 +1,5 @@
-import jwt from 'jsonwebtoken';
 import User from '../models/user.model.js';
+import { verifyUserToken } from '../utils/jwt.js';
 
 const authMiddleware = async (req, res, next) => {
   try {
@@ -10,7 +10,7 @@ const authMiddleware = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Unauthorized: token missing' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = verifyUserToken(token);
     const user = await User.findById(decoded.id).select('-password');
 
     if (!user) {

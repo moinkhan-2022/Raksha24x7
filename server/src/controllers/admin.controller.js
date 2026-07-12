@@ -9,6 +9,7 @@ import {
   revokeAllAdminSessions,
   writeAdminAuditLog
 } from '../services/adminAuth.service.js';
+import { validateStrongPassword } from '../utils/passwordPolicy.js';
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_TIME_MS = 15 * 60 * 1000;
@@ -134,9 +135,10 @@ export const updateAdminProfile = async (req, res) => {
 export const changeAdminPassword = async (req, res) => {
   try {
     const { currentPassword, newPassword, confirmPassword } = req.body || {};
+    const passwordError = validateStrongPassword(newPassword);
     if (!currentPassword || !newPassword) return res.status(400).json({ success: false, message: 'Current and new password are required.' });
     if (newPassword !== confirmPassword) return res.status(400).json({ success: false, message: 'Passwords do not match.' });
-    if (newPassword.length < 8) return res.status(400).json({ success: false, message: 'Password must be at least 8 characters.' });
+    if (passwordError) return res.status(400).json({ success: false, message: passwordError });
 
     const admin = await Admin.findById(req.admin._id).select('+password');
     const valid = await admin.comparePassword(currentPassword);

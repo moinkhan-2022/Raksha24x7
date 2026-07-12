@@ -1,6 +1,5 @@
 import { body } from 'express-validator';
-
-const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+import { validateStrongPassword } from '../utils/passwordPolicy.js';
 
 export const registerValidator = [
   body('email')
@@ -11,8 +10,11 @@ export const registerValidator = [
   body('password')
     .notEmpty().withMessage('All fields are required')
     .bail()
-    .matches(strongPasswordRegex)
-    .withMessage('Password must contain at least 8 characters, one uppercase letter, one lowercase letter and one number'),
+    .custom((value) => {
+      const error = validateStrongPassword(value);
+      if (error) throw new Error(error);
+      return true;
+    }),
   body('confirmPassword')
     .notEmpty().withMessage('All fields are required')
     .bail()

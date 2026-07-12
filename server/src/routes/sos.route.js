@@ -13,20 +13,27 @@ import {
   startSos,
   stopSos
 } from '../controllers/sos.controller.js';
+import { sosSchemas, validateSchema } from '../middleware/validation.middleware.js';
 
 const router = Router();
 
 router.get('/tracking/:token', getTrackingByToken);
 
 router.use(authMiddleware);
-router.post('/start', sosRateLimit, startSos);
-router.post('/send', sosRateLimit, sendSos);
+router.post('/start', sosRateLimit, validateSchema({ body: sosSchemas.create, allowUnknownBody: true }), startSos);
+router.post('/send', sosRateLimit, validateSchema({ body: sosSchemas.create, allowUnknownBody: true }), sendSos);
 router.post('/stop', stopSos);
-router.post('/share-location', shareLocation);
+router.post('/share-location', validateSchema({
+  body: {
+    sosId: { required: true, type: 'objectId', typeMessage: 'Valid SOS ID is required.' },
+    ...sosSchemas.create
+  },
+  allowUnknownBody: true
+}), shareLocation);
 router.post('/retry', retrySos);
 router.get('/history', getSosHistory);
 router.get('/latest', getLatestSos);
-router.get('/:id', getSosById);
-router.delete('/history/:id', deleteSosHistoryItem);
+router.get('/:id', validateSchema({ params: sosSchemas.idParam }), getSosById);
+router.delete('/history/:id', validateSchema({ params: sosSchemas.idParam }), deleteSosHistoryItem);
 
 export default router;

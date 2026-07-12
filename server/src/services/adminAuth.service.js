@@ -2,8 +2,8 @@ import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import AdminSession from '../models/adminSession.model.js';
 import AdminAuditLog from '../models/adminAuditLog.model.js';
+import { jwtConfig } from '../config/security.js';
 
-const ADMIN_TOKEN_ISSUER = 'raksha24x7-admin';
 const DEFAULT_ADMIN_EXPIRES_IN = '8h';
 const REMEMBER_ADMIN_EXPIRES_IN = '30d';
 
@@ -81,12 +81,21 @@ export const createAdminSession = async ({ admin, req, remember = false }) => {
   const token = jwt.sign(
     { id: admin._id.toString(), role: admin.role, permissions: admin.permissions || [], sessionId, tokenId, scope: 'admin' },
     getAdminJwtSecret(),
-    { expiresIn: remember ? REMEMBER_ADMIN_EXPIRES_IN : (process.env.ADMIN_JWT_EXPIRES_IN || DEFAULT_ADMIN_EXPIRES_IN), issuer: ADMIN_TOKEN_ISSUER }
+    {
+      algorithm: jwtConfig.algorithm,
+      expiresIn: remember ? REMEMBER_ADMIN_EXPIRES_IN : (process.env.ADMIN_JWT_EXPIRES_IN || DEFAULT_ADMIN_EXPIRES_IN),
+      issuer: jwtConfig.adminIssuer,
+      audience: jwtConfig.adminAudience
+    }
   );
   return { token, expiresAt, session };
 };
 
-export const verifyAdminToken = (token) => jwt.verify(token, getAdminJwtSecret(), { issuer: ADMIN_TOKEN_ISSUER });
+export const verifyAdminToken = (token) => jwt.verify(token, getAdminJwtSecret(), {
+  algorithms: [jwtConfig.algorithm],
+  issuer: jwtConfig.adminIssuer,
+  audience: jwtConfig.adminAudience
+});
 
 export const revokeAdminSession = async ({ sessionId, adminId }) => {
   if (!sessionId) return null;

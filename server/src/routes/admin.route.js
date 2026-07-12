@@ -83,12 +83,19 @@ import {
   updateAdminUserStatus
 } from '../controllers/adminUser.controller.js';
 import adminMiddleware from '../middleware/admin.middleware.js';
-import adminLoginRateLimit from '../middleware/adminRateLimit.middleware.js';
+import {
+  adminExpensiveRateLimit,
+  adminLoginRateLimit,
+  bulkActionRateLimit,
+  emailActionRateLimit,
+  sensitiveRateLimit
+} from '../middleware/security.middleware.js';
+import { authSchemas, validateSchema } from '../middleware/validation.middleware.js';
 
 const router = Router();
 
-router.post('/auth/login', adminLoginRateLimit, adminLogin);
-router.post('/login', adminLoginRateLimit, adminLogin);
+router.post('/auth/login', adminLoginRateLimit, validateSchema({ body: authSchemas.adminLogin, allowUnknownBody: false }), adminLogin);
+router.post('/login', adminLoginRateLimit, validateSchema({ body: authSchemas.adminLogin, allowUnknownBody: false }), adminLogin);
 
 router.use(adminMiddleware);
 
@@ -117,7 +124,7 @@ router.get('/analytics/email', getAnalyticsEmail);
 router.get('/analytics/notifications', getAnalyticsNotifications);
 router.get('/analytics/system', getAnalyticsSystem);
 router.get('/reports', getReports);
-router.post('/reports/export', exportReports);
+router.post('/reports/export', adminExpensiveRateLimit, exportReports);
 router.get('/audit-logs', getAuditLogs);
 router.get('/search', globalAdminSearch);
 router.get('/sos/active', getAdminSosByStatus('active'));
@@ -129,14 +136,14 @@ router.get('/sos/:id/tracking', getAdminSosTracking);
 router.get('/sos/:id', getAdminSosDetails);
 router.patch('/sos/:id/review', markSosReviewed);
 router.patch('/sos/:id/notes', updateSosNotes);
-router.post('/sos/export', exportAdminSos);
+router.post('/sos/export', adminExpensiveRateLimit, exportAdminSos);
 router.get('/email/logs', listAdminEmailLogs);
 router.get('/email/logs/:id', getAdminEmailLogDetails);
 router.get('/email/queue', listAdminEmailQueue);
 router.get('/email/statistics', getAdminEmailStatistics);
-router.post('/email/retry/:id', retryAdminEmail);
-router.post('/email/retry-failed', retryFailedAdminEmails);
-router.post('/email/export', exportAdminEmailLogs);
+router.post('/email/retry/:id', emailActionRateLimit, retryAdminEmail);
+router.post('/email/retry-failed', emailActionRateLimit, retryFailedAdminEmails);
+router.post('/email/export', adminExpensiveRateLimit, exportAdminEmailLogs);
 router.get('/settings', getAdminSettings);
 router.put('/settings', updateGeneralSettings);
 router.patch('/settings/general', updateGeneralSettings);
@@ -147,14 +154,14 @@ router.patch('/settings/security', updateSecuritySettings);
 router.patch('/settings/maintenance', updateMaintenanceSettings);
 router.get('/settings/email-templates', getEmailTemplateSettings);
 router.patch('/settings/email-template/:id', updateEmailTemplateSetting);
-router.post('/settings/email-template/test', sendEmailTemplateTest);
+router.post('/settings/email-template/test', sensitiveRateLimit, sendEmailTemplateTest);
 router.get('/settings/emergency-numbers', listEmergencyNumbers);
 router.post('/settings/emergency-numbers', createEmergencyNumber);
 router.patch('/settings/emergency-numbers/:id', updateEmergencyNumber);
 router.delete('/settings/emergency-numbers/:id', deleteEmergencyNumber);
-router.post('/settings/smtp/test', testSmtpSettings);
+router.post('/settings/smtp/test', sensitiveRateLimit, testSmtpSettings);
 router.get('/users/export', exportAdminUsers);
-router.post('/users/export', exportAdminUsers);
+router.post('/users/export', adminExpensiveRateLimit, exportAdminUsers);
 router.get('/users', listAdminUsers);
 router.get('/users/:id', getAdminUserDetails);
 router.get('/users/:id/activity', getAdminUserActivity);
@@ -165,7 +172,7 @@ router.patch('/users/:id/suspend', suspendAdminUser);
 router.patch('/users/:id/activate', activateAdminUser);
 router.patch('/users/:id/restore', restoreAdminUser);
 router.delete('/users/:id', deleteAdminUser);
-router.post('/users/bulk', bulkAdminUserAction);
+router.post('/users/bulk', bulkActionRateLimit, bulkAdminUserAction);
 router.post('/logout', adminLogout);
 router.post('/logout-all', adminLogoutAll);
 

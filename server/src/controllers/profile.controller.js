@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import User from '../models/user.model.js';
 import { sendPasswordChangedEmail } from '../utils/email.js';
+import { validateStrongPassword } from '../utils/passwordPolicy.js';
 
 const safeUser = (user) => ({
   id: user._id,
@@ -105,13 +106,11 @@ export const setPrimaryContact = async (req, res) => {
 export const changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword, confirmPassword } = req.body;
-    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
+    const passwordError = validateStrongPassword(newPassword);
     if (!currentPassword || !newPassword || !confirmPassword) {
       return res.status(400).json({ success: false, message: 'All fields are required' });
     }
-    if (!regex.test(newPassword || '')) {
-      return res.status(400).json({ success: false, message: 'Password must include upper, lower, number, special char and min 8' });
-    }
+    if (passwordError) return res.status(400).json({ success: false, message: passwordError });
     if (newPassword !== confirmPassword) {
       return res.status(400).json({ success: false, message: 'Confirm password mismatch' });
     }
