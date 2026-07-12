@@ -24,10 +24,15 @@ import {
 } from '../controllers/adminDashboard.controller.js';
 import {
   bulkAdminUserAction,
+  activateAdminUser,
   deleteAdminUser,
   exportAdminUsers,
+  getAdminUserActivity,
   getAdminUserDetails,
+  getAdminUserEmergencyContacts,
   listAdminUsers,
+  restoreAdminUser,
+  suspendAdminUser,
   updateAdminUser,
   updateAdminUserStatus
 } from '../controllers/adminUser.controller.js';
@@ -62,10 +67,16 @@ router.get('/dashboard/system-health', getDashboardSystemHealth);
 router.get('/settings', getAdminSettings);
 router.put('/settings', updateAdminSettings);
 router.get('/users/export', exportAdminUsers);
+router.post('/users/export', exportAdminUsers);
 router.get('/users', listAdminUsers);
 router.get('/users/:id', getAdminUserDetails);
+router.get('/users/:id/activity', getAdminUserActivity);
+router.get('/users/:id/emergency-contacts', getAdminUserEmergencyContacts);
 router.put('/users/:id', updateAdminUser);
 router.patch('/users/:id/status', updateAdminUserStatus);
+router.patch('/users/:id/suspend', suspendAdminUser);
+router.patch('/users/:id/activate', activateAdminUser);
+router.patch('/users/:id/restore', restoreAdminUser);
 router.delete('/users/:id', deleteAdminUser);
 router.post('/users/bulk', bulkAdminUserAction);
 router.post('/logout', adminLogout);

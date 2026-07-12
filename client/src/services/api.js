@@ -80,11 +80,16 @@ export const adminApi = {
   updateSettings: (payload) => adminHttp.put('/settings', payload),
   users: (params) => adminHttp.get('/users', { params }),
   userDetails: (id) => adminHttp.get(`/users/${id}`),
+  userActivity: (id) => adminHttp.get(`/users/${id}/activity`),
+  userEmergencyContacts: (id) => adminHttp.get(`/users/${id}/emergency-contacts`),
   updateUser: (id, payload) => adminHttp.put(`/users/${id}`, payload),
   updateUserStatus: (id, status) => adminHttp.patch(`/users/${id}/status`, { status }),
-  deleteUser: (id, confirmation = 'DELETE') => adminHttp.delete(`/users/${id}`, { data: { confirmation } }),
+  suspendUser: (id) => adminHttp.patch(`/users/${id}/suspend`),
+  activateUser: (id) => adminHttp.patch(`/users/${id}/activate`),
+  restoreUser: (id) => adminHttp.patch(`/users/${id}/restore`),
+  deleteUser: (id, confirmation = 'DELETE', permanent = false) => adminHttp.delete(`/users/${id}`, { data: { confirmation, permanent } }),
   bulkUsers: (payload) => adminHttp.post('/users/bulk', payload),
-  exportUsers: (format = 'csv') => adminHttp.get('/users/export', { params: { format }, responseType: format === 'pdf' ? 'json' : 'blob' })
+  exportUsers: (format = 'csv', filters = {}) => adminHttp.post('/users/export', { format, filters }, { responseType: 'blob' })
 };
 
 export default api;
