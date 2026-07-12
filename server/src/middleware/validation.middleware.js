@@ -171,3 +171,13 @@ export const sosSchemas = {
     id: { required: true, type: 'objectId', typeMessage: 'Valid id is required.' }
   }
 };
+
+export const backupSchemas = {
+  create: {
+    type: { type: 'string', enum: ['manual', 'daily', 'weekly', 'monthly', 'full', 'incremental'] },
+    format: { type: 'string', enum: ['json', 'csv'] }
+  },
+  backupParam: {
+    backupId: { required: true, type: 'string', min: 8, max: 160, pattern: /^[a-zA-Z0-9_-]+$/, patternMessage: 'Valid backup id is required.' }
+  }
+};

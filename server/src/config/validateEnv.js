@@ -17,6 +17,8 @@ const smtpConfigured = () => (
   || hasValue('RESEND_API_KEY')
 );
 const weakDefaults = new Set(['secret', 'password', 'changeme', 'replace_with_strong_secret', 'replace_with_separate_strong_admin_secret', 'replace_with_signed_cookie_secret', 'Raksha24x7Secret123']);
+const allowedBackupProviders = new Set(['local', 'atlas', 's3', 'gcs', 'azure']);
+const allowedBackupSchedules = new Set(['disabled', 'daily', 'weekly', 'monthly']);
 
 const hasValue = (key) => Boolean(String(process.env[key] || '').trim());
 const mask = (value = '') => `${String(value).slice(0, 3)}***${String(value).slice(-3)}`;
@@ -65,6 +67,20 @@ export const validateEnvironment = () => {
 
   if (process.env.JWT_SECRET && process.env.ADMIN_JWT_SECRET && process.env.JWT_SECRET === process.env.ADMIN_JWT_SECRET) {
     errors.push('JWT_SECRET and ADMIN_JWT_SECRET must be different.');
+  }
+
+  if (!allowedBackupProviders.has(appConfig.backup.provider)) {
+    errors.push(`BACKUP_PROVIDER must be one of: ${[...allowedBackupProviders].join(', ')}.`);
+  }
+  if (!allowedBackupSchedules.has(appConfig.backup.schedule)) {
+    errors.push(`BACKUP_SCHEDULE must be one of: ${[...allowedBackupSchedules].join(', ')}.`);
+  }
+  if (appConfig.backup.retentionDays < 1) errors.push('BACKUP_RETENTION_DAYS must be at least 1.');
+  if (appConfig.backup.encryption && !appConfig.backup.encryptionKeyConfigured) {
+    errors.push('BACKUP_ENCRYPTION_KEY is required when BACKUP_ENCRYPTION=true.');
+  }
+  if (isProduction && appConfig.backup.enabled && appConfig.backup.provider === 'local') {
+    warnings.push('Production BACKUP_PROVIDER=local is suitable only for temporary backups. Prefer MongoDB Atlas snapshots or cloud object storage.');
   }
 
   if (warnings.length) {

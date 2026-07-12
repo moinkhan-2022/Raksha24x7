@@ -8,6 +8,8 @@ build/
 .vite/
 uploads/
 coverage/
+backups/
+server/backups/
 
 # Logs
 npm-debug.log*

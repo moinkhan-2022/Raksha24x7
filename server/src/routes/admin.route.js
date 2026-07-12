@@ -82,6 +82,13 @@ import {
   updateAdminUser,
   updateAdminUserStatus
 } from '../controllers/adminUser.controller.js';
+import {
+  cleanupAdminBackups,
+  createAdminBackup,
+  getAdminBackupStatus,
+  listAdminBackups,
+  verifyAdminBackup
+} from '../controllers/adminBackup.controller.js';
 import adminMiddleware from '../middleware/admin.middleware.js';
 import {
   adminExpensiveRateLimit,
@@ -90,7 +97,7 @@ import {
   emailActionRateLimit,
   sensitiveRateLimit
 } from '../middleware/security.middleware.js';
-import { authSchemas, validateSchema } from '../middleware/validation.middleware.js';
+import { authSchemas, backupSchemas, validateSchema } from '../middleware/validation.middleware.js';
 
 const router = Router();
 
@@ -117,6 +124,11 @@ router.get('/dashboard/emails', getDashboardEmails);
 router.get('/dashboard/notifications', getDashboardNotifications);
 router.get('/dashboard/activity', getDashboardActivity);
 router.get('/dashboard/system-health', getDashboardSystemHealth);
+router.get('/backups/status', getAdminBackupStatus);
+router.get('/backups', listAdminBackups);
+router.post('/backups', adminExpensiveRateLimit, validateSchema({ body: backupSchemas.create, allowUnknownBody: false }), createAdminBackup);
+router.post('/backups/cleanup', adminExpensiveRateLimit, cleanupAdminBackups);
+router.post('/backups/:backupId/verify', adminExpensiveRateLimit, validateSchema({ params: backupSchemas.backupParam }), verifyAdminBackup);
 router.get('/analytics/users', getAnalyticsUsers);
 router.get('/analytics/sos', getAnalyticsSos);
 router.get('/analytics/location', getAnalyticsLocation);

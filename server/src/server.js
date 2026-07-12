@@ -5,6 +5,7 @@ import { validateEnvironment } from './config/validateEnv.js';
 import logger, { logError } from './config/logger.js';
 import { appConfig } from './config/appConfig.js';
 import { verifyEmailProvider } from './email/services/emailProvider.service.js';
+import { startBackupScheduler } from './services/backup.service.js';
 
 const PORT = appConfig.port;
 let server;
@@ -30,6 +31,7 @@ const startServer = async () => {
     if (appConfig.isProduction || process.env.EMAIL_VERIFY_ON_STARTUP === 'true') {
       await verifyEmailProvider();
     }
+    startBackupScheduler();
     server = app.listen(PORT, () => {
       logger.info(`Server running on port ${PORT}`, { port: PORT, environment: process.env.NODE_ENV || 'development' });
     });

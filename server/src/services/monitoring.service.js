@@ -2,6 +2,7 @@ import os from 'node:os';
 import mongoose from 'mongoose';
 import { performanceLog } from '../config/logger.js';
 import { emailProviderStatus } from '../email/services/emailProvider.service.js';
+import { getBackupConfigSummary } from './backup.service.js';
 
 const metrics = {
   startedAt: new Date(),
@@ -112,6 +113,7 @@ export const getHealthSnapshot = async () => {
     mongoPingMs,
     smtp: email.smtpConfigured || email.resendConfigured ? 'configured' : 'not_configured',
     emailProvider: email.provider,
+    backup: getBackupConfigSummary(),
     jwt: process.env.JWT_SECRET && process.env.ADMIN_JWT_SECRET ? 'configured' : 'missing',
     version: process.env.npm_package_version || '1.0.0',
     metrics: getMetricsSnapshot()

@@ -55,6 +55,20 @@ export const appConfig = {
     from: process.env.EMAIL_FROM || process.env.EMAIL_USER || process.env.SMTP_USER || 'no-reply@raksha24x7.com',
     fromName: process.env.EMAIL_FROM_NAME || 'Raksha24x7',
     resendConfigured: Boolean(process.env.RESEND_API_KEY)
+  },
+  backup: {
+    enabled: String(process.env.BACKUP_ENABLED || 'false').toLowerCase() === 'true',
+    directory: process.env.BACKUP_DIRECTORY || 'server/backups',
+    retentionDays: numberFromEnv('BACKUP_RETENTION_DAYS', 30),
+    dailyKeep: numberFromEnv('BACKUP_KEEP_DAILY', 7),
+    weeklyKeep: numberFromEnv('BACKUP_KEEP_WEEKLY', 4),
+    monthlyKeep: numberFromEnv('BACKUP_KEEP_MONTHLY', 12),
+    schedule: process.env.BACKUP_SCHEDULE || 'daily',
+    provider: String(process.env.BACKUP_PROVIDER || 'local').toLowerCase(),
+    compression: String(process.env.BACKUP_COMPRESSION || 'true').toLowerCase() !== 'false',
+    encryption: String(process.env.BACKUP_ENCRYPTION || 'false').toLowerCase() === 'true',
+    encryptionKeyConfigured: Boolean(process.env.BACKUP_ENCRYPTION_KEY),
+    maxCollectionExport: numberFromEnv('BACKUP_MAX_COLLECTION_EXPORT', 0)
   }
 };
 
