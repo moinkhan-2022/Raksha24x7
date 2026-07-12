@@ -32,11 +32,11 @@ const statIcons = {
 
 const quickActions = [
   { label: 'Manage Users', to: '/admin/users', icon: Users, description: 'Open user administration' },
-  { label: 'View SOS', to: '/admin/dashboard?section=sos', icon: ShieldAlert, description: 'Review SOS analytics' },
-  { label: 'Email Logs', to: '/admin/dashboard?section=emails', icon: Mail, description: 'Future email log area' },
+  { label: 'View SOS', to: '/admin/sos', icon: ShieldAlert, description: 'Review SOS analytics' },
+  { label: 'Email Logs', to: '/admin/email', icon: Mail, description: 'Delivery and queue monitoring' },
   { label: 'Notifications', to: '/admin/dashboard?section=notifications', icon: Bell, description: 'Notification monitoring' },
-  { label: 'Analytics', to: '/admin/dashboard?section=analytics', icon: BarChart3, description: 'Growth and usage charts' },
-  { label: 'Reports', to: '/admin/dashboard?section=reports', icon: FileText, description: 'Future reports area' },
+  { label: 'Analytics', to: '/admin/analytics', icon: BarChart3, description: 'Growth and usage charts' },
+  { label: 'Reports', to: '/admin/analytics', icon: FileText, description: 'Reports, exports and audit logs' },
   { label: 'Settings', to: '/admin/settings', icon: Settings, description: 'Admin configuration' }
 ];
 

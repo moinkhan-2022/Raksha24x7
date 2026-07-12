@@ -38,6 +38,18 @@ import {
   getDashboardUsers
 } from '../controllers/adminDashboard.controller.js';
 import {
+  exportReports,
+  getAnalyticsEmail,
+  getAnalyticsLocation,
+  getAnalyticsNotifications,
+  getAnalyticsSos,
+  getAnalyticsSystem,
+  getAnalyticsUsers,
+  getAuditLogs,
+  getReports,
+  globalAdminSearch
+} from '../controllers/adminAnalytics.controller.js';
+import {
   exportAdminSos,
   getAdminSosByStatus,
   getAdminSosDetails,
@@ -98,6 +110,16 @@ router.get('/dashboard/emails', getDashboardEmails);
 router.get('/dashboard/notifications', getDashboardNotifications);
 router.get('/dashboard/activity', getDashboardActivity);
 router.get('/dashboard/system-health', getDashboardSystemHealth);
+router.get('/analytics/users', getAnalyticsUsers);
+router.get('/analytics/sos', getAnalyticsSos);
+router.get('/analytics/location', getAnalyticsLocation);
+router.get('/analytics/email', getAnalyticsEmail);
+router.get('/analytics/notifications', getAnalyticsNotifications);
+router.get('/analytics/system', getAnalyticsSystem);
+router.get('/reports', getReports);
+router.post('/reports/export', exportReports);
+router.get('/audit-logs', getAuditLogs);
+router.get('/search', globalAdminSearch);
 router.get('/sos/active', getAdminSosByStatus('active'));
 router.get('/sos/completed', getAdminSosByStatus('completed'));
 router.get('/sos/failed', getAdminSosByStatus('failed'));

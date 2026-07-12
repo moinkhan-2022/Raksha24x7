@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import {
-  Bell, FileText, LayoutDashboard, LogOut, Menu, Megaphone, Monitor, Search, Settings,
+  BarChart3, Bell, FileText, LayoutDashboard, LogOut, Menu, Megaphone, Monitor, Search, Settings,
   Shield, ShieldAlert, UserCircle2, Users, X
 } from 'lucide-react';
 import { useAdminAuth } from '../context/AdminAuthContext';
@@ -11,9 +11,9 @@ const navItems = [
   { label: 'Users', to: '/admin/users', icon: Users },
   { label: 'SOS Monitoring', to: '/admin/sos', icon: ShieldAlert },
   { label: 'Email Logs', to: '/admin/email', icon: FileText },
+  { label: 'Analytics & Reports', to: '/admin/analytics', icon: BarChart3 },
   { label: 'Emergency Numbers', to: '/emergency-numbers', icon: ShieldAlert },
   { label: 'Safety Tips', to: '/admin/dashboard?section=safety-tips', icon: Megaphone },
-  { label: 'Reports', to: '/admin/dashboard?section=reports', icon: FileText },
   { label: 'Notifications', to: '/admin/dashboard?section=notifications', icon: Bell },
   { label: 'Settings', to: '/admin/settings', icon: Settings },
   { label: 'Sessions', to: '/admin/sessions', icon: Monitor },
