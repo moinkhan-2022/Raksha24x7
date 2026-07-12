@@ -1,16 +1,36 @@
 import './config/env.js';
 import app from './app.js';
-import { connectDB } from './config/db.js';
+import { closeDB, connectDB } from './config/db.js';
 import { validateEnvironment } from './config/validateEnv.js';
 import logger, { logError } from './config/logger.js';
+import { appConfig } from './config/appConfig.js';
+import { verifyEmailProvider } from './email/services/emailProvider.service.js';
 
-const PORT = process.env.PORT || 5000;
+const PORT = appConfig.port;
+let server;
+
+const gracefulShutdown = async (signal) => {
+  logger.info('Graceful shutdown requested', { signal });
+  if (server) {
+    server.close(async () => {
+      await closeDB();
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(1), 10000).unref();
+    return;
+  }
+  await closeDB();
+  process.exit(0);
+};
 
 const startServer = async () => {
   try {
     validateEnvironment();
     await connectDB();
-    const server = app.listen(PORT, () => {
+    if (appConfig.isProduction || process.env.EMAIL_VERIFY_ON_STARTUP === 'true') {
+      await verifyEmailProvider();
+    }
+    server = app.listen(PORT, () => {
       logger.info(`Server running on port ${PORT}`, { port: PORT, environment: process.env.NODE_ENV || 'development' });
     });
 
@@ -32,5 +52,8 @@ process.on('uncaughtException', (error) => {
   logError(error, { scope: 'uncaught_exception' });
   process.exit(1);
 });
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 startServer();

@@ -1,4 +1,8 @@
+import './config/env.js';
 import express from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
@@ -10,6 +14,7 @@ import locationRoutes from './routes/location.route.js';
 import notificationRoutes from './routes/notification.route.js';
 import adminRoutes from './routes/admin.route.js';
 import { corsOptions, helmetOptions } from './config/security.js';
+import { appConfig } from './config/appConfig.js';
 import {
   adminApiRateLimit,
   adminExpensiveRateLimit,
@@ -32,20 +37,27 @@ import { errorHandler, notFoundHandler } from './middleware/error.middleware.js'
 import { requestContext, requestLogger } from './middleware/requestLogger.middleware.js';
 
 const app = express();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const clientDistPath = path.resolve(__dirname, '../../client/dist');
 app.disable('x-powered-by');
-app.set('trust proxy', 1);
+app.set('trust proxy', appConfig.trustProxy);
 app.use(helmet(helmetOptions));
 app.use(securityHeaders);
 app.use(cors(corsOptions));
 app.use(compressionMiddleware);
 app.use(cookieParser(process.env.COOKIE_SECRET || process.env.JWT_SECRET));
-app.use(express.json({ limit: '5mb' }));
-app.use(express.urlencoded({ extended: false, limit: '1mb' }));
+app.use(express.json({ limit: appConfig.uploadLimit }));
+app.use(express.urlencoded({ extended: false, limit: appConfig.urlEncodedLimit }));
 app.use(requestContext);
 app.use(requestLogger);
 app.use(requestSanitizer);
 app.use(hppProtection);
 app.use('/api', globalRateLimit);
+app.use('/api', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
 
 app.get('/', (req, res) => res.json({ message: 'Raksha 24x7 backend running' }));
 app.use('/api/health', healthRoute);
@@ -75,6 +87,25 @@ app.use('/api/admin', adminApiRateLimit);
 app.use('/api/admin', adminRoutes);
 // Keep broad profile routes last so user auth middleware cannot intercept admin APIs.
 app.use('/api', profileRoute);
+
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath, {
+    etag: true,
+    lastModified: true,
+    setHeaders(res, assetPath) {
+      if (assetPath.endsWith('service-worker.js') || assetPath.endsWith('manifest.webmanifest') || assetPath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-cache');
+        return;
+      }
+      if (assetPath.includes(`${path.sep}assets${path.sep}`)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        return;
+      }
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+    }
+  }));
+}
+
 app.use(notFoundHandler);
 app.use(errorHandler);
 

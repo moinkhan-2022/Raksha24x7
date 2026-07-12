@@ -1,8 +1,10 @@
 import nodemailer from 'nodemailer';
+import { appConfig } from '../../config/appConfig.js';
+import logger, { logError } from '../../config/logger.js';
 
-const providerName = () => String(process.env.EMAIL_PROVIDER || (process.env.RESEND_API_KEY ? 'resend' : 'smtp')).toLowerCase();
-const fromEmail = () => process.env.EMAIL_FROM || process.env.EMAIL_USER || 'no-reply@raksha24x7.com';
-const fromName = () => process.env.EMAIL_FROM_NAME || 'Raksha24x7';
+const providerName = () => appConfig.email.provider;
+const fromEmail = () => appConfig.email.from;
+const fromName = () => appConfig.email.fromName;
 
 const formatFrom = () => {
   const from = fromEmail();
@@ -10,15 +12,18 @@ const formatFrom = () => {
   return `${fromName()} <${from}>`;
 };
 
-const hasSmtpConfig = () => Boolean(process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS);
+const hasSmtpConfig = () => Boolean(appConfig.email.host && appConfig.email.user && appConfig.email.passConfigured);
 
 const createTransporter = () => nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: Number(process.env.EMAIL_PORT || 587),
-  secure: Number(process.env.EMAIL_PORT) === 465,
+  host: appConfig.email.host,
+  port: appConfig.email.port,
+  secure: appConfig.email.port === 465,
+  connectionTimeout: Number(process.env.EMAIL_CONNECTION_TIMEOUT_MS || 10000),
+  greetingTimeout: Number(process.env.EMAIL_GREETING_TIMEOUT_MS || 10000),
+  socketTimeout: Number(process.env.EMAIL_SOCKET_TIMEOUT_MS || 15000),
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
+    user: appConfig.email.user,
+    pass: process.env.EMAIL_PASS || process.env.SMTP_PASS
   }
 });
 
@@ -80,6 +85,27 @@ export const sendViaProvider = async (email) => {
 export const emailProviderStatus = () => ({
   provider: providerName(),
   from: formatFrom(),
-  resendConfigured: Boolean(process.env.RESEND_API_KEY),
+  resendConfigured: appConfig.email.resendConfigured,
   smtpConfigured: hasSmtpConfig()
 });
+
+export const verifyEmailProvider = async () => {
+  const provider = providerName();
+  try {
+    if (provider === 'resend') {
+      const configured = appConfig.email.resendConfigured;
+      logger.info('Email provider verification completed', { provider, configured });
+      return { provider, configured };
+    }
+    if (['smtp', 'gmail', 'sendgrid', 'mailgun', 'ses'].includes(provider)) {
+      if (!hasSmtpConfig()) return { provider, configured: false };
+      await createTransporter().verify();
+      logger.info('SMTP provider verified', { provider, host: appConfig.email.host, port: appConfig.email.port });
+      return { provider, configured: true };
+    }
+    return { provider, configured: false, unsupported: true };
+  } catch (error) {
+    logError(error, { scope: 'email_provider_verify', provider });
+    return { provider, configured: false, error: error.message };
+  }
+};

@@ -4,8 +4,8 @@ import AdminSession from '../models/adminSession.model.js';
 import AdminAuditLog from '../models/adminAuditLog.model.js';
 import { jwtConfig } from '../config/security.js';
 import { logAdminActivity } from '../config/logger.js';
+import { appConfig } from '../config/appConfig.js';
 
-const DEFAULT_ADMIN_EXPIRES_IN = '8h';
 const REMEMBER_ADMIN_EXPIRES_IN = '30d';
 
 export const getAdminJwtSecret = () => {
@@ -89,7 +89,7 @@ export const createAdminSession = async ({ admin, req, remember = false }) => {
     getAdminJwtSecret(),
     {
       algorithm: jwtConfig.algorithm,
-      expiresIn: remember ? REMEMBER_ADMIN_EXPIRES_IN : (process.env.ADMIN_JWT_EXPIRES_IN || DEFAULT_ADMIN_EXPIRES_IN),
+      expiresIn: remember ? REMEMBER_ADMIN_EXPIRES_IN : appConfig.jwt.adminExpiresIn,
       issuer: jwtConfig.adminIssuer,
       audience: jwtConfig.adminAudience
     }

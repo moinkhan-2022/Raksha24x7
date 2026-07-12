@@ -4,6 +4,11 @@ import path from 'node:path';
 const storage = multer.memoryStorage();
 const allowedMimeTypes = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
 const allowedExtensions = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+const uploadBytes = () => {
+  const raw = String(process.env.UPLOAD_FILE_SIZE_BYTES || '').trim();
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 2 * 1024 * 1024;
+};
 
 const fileFilter = (req, file, cb) => {
   const extension = path.extname(file.originalname || '').toLowerCase();
@@ -19,5 +24,5 @@ const fileFilter = (req, file, cb) => {
 export const uploadProfilePhoto = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 2 * 1024 * 1024, files: 1, fields: 5 }
+  limits: { fileSize: uploadBytes(), files: 1, fields: 5 }
 }).single('photo');

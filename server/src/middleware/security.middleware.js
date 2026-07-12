@@ -3,6 +3,7 @@ import hpp from 'hpp';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { permissionsPolicy } from '../config/security.js';
 import { logSecurityEvent } from '../config/logger.js';
+import { appConfig } from '../config/appConfig.js';
 
 const DANGEROUS_KEYS = new Set(['$where', '$regex', '$ne', '$gt', '$gte', '$lt', '$lte', '$or', '$and', '$nor', '$expr', '$function']);
 const SCRIPT_PATTERN = /<\s*\/?\s*script\b[^>]*>/gi;
@@ -86,8 +87,8 @@ const createLimiter = ({ windowMs, limit, scope, keyGenerator }) => rateLimit({
 });
 
 export const globalRateLimit = createLimiter({
-  windowMs: 15 * 60 * 1000,
-  limit: isProduction ? 300 : 1000,
+  windowMs: appConfig.rateLimitWindowMs,
+  limit: appConfig.rateLimitMax,
   scope: 'global'
 });
 

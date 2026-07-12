@@ -1,10 +1,11 @@
 import jwt from 'jsonwebtoken';
 import { jwtConfig } from '../config/security.js';
+import { appConfig } from '../config/appConfig.js';
 
 export const signToken = (payload) =>
   jwt.sign(payload, process.env.JWT_SECRET, {
     algorithm: jwtConfig.algorithm,
-    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    expiresIn: appConfig.jwt.userExpiresIn,
     issuer: jwtConfig.userIssuer,
     audience: jwtConfig.userAudience
   });

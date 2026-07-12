@@ -1,12 +1,15 @@
+import { appConfig } from './appConfig.js';
+
 const csv = (value = '') => String(value).split(',').map((item) => item.trim()).filter(Boolean);
 
-export const isProduction = process.env.NODE_ENV === 'production';
+export const isProduction = appConfig.isProduction;
 
 export const CLIENT_ORIGINS = [
-  process.env.CLIENT_URL,
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-  ...csv(process.env.CORS_ORIGINS || process.env.ALLOWED_ORIGINS)
+  appConfig.clientUrl,
+  appConfig.serverUrl,
+  ...(isProduction ? [] : ['http://localhost:5173', 'http://127.0.0.1:5173']),
+  ...appConfig.corsOrigins,
+  ...csv(process.env.GOOGLE_AUTHORIZED_ORIGINS)
 ].filter(Boolean);
 
 export const corsOptions = {
@@ -17,8 +20,8 @@ export const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
-  exposedHeaders: ['RateLimit-Limit', 'RateLimit-Remaining', 'RateLimit-Reset', 'Retry-After'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token', 'X-Request-ID'],
+  exposedHeaders: ['RateLimit-Limit', 'RateLimit-Remaining', 'RateLimit-Reset', 'Retry-After', 'X-Request-ID'],
   maxAge: 60 * 60
 };
 
@@ -76,9 +79,9 @@ export const permissionsPolicy = [
 ].join(', ');
 
 export const jwtConfig = {
-  algorithm: 'HS256',
-  userIssuer: 'raksha24x7-api',
-  userAudience: 'raksha24x7-users',
-  adminIssuer: 'raksha24x7-admin',
-  adminAudience: 'raksha24x7-admins'
+  algorithm: appConfig.jwt.algorithm,
+  userIssuer: appConfig.jwt.userIssuer,
+  userAudience: appConfig.jwt.userAudience,
+  adminIssuer: appConfig.jwt.adminIssuer,
+  adminAudience: appConfig.jwt.adminAudience
 };

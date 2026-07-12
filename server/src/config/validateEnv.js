@@ -1,14 +1,22 @@
 import { isProduction } from './security.js';
 import logger from './logger.js';
+import { appConfig } from './appConfig.js';
 
 const requiredAlways = ['MONGODB_URI', 'JWT_SECRET', 'ADMIN_JWT_SECRET'];
-const productionRecommended = ['CLIENT_URL', 'GOOGLE_CLIENT_ID'];
+const requiredProduction = [
+  'CLIENT_URL',
+  'SERVER_URL',
+  'COOKIE_SECRET',
+  'SESSION_SECRET',
+  'GOOGLE_CLIENT_ID',
+  'GOOGLE_CLIENT_SECRET'
+];
 const smtpConfigured = () => (
   ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS'].every(hasValue)
   || ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASS'].every(hasValue)
   || hasValue('RESEND_API_KEY')
 );
-const weakDefaults = new Set(['secret', 'password', 'changeme', 'replace_with_strong_secret', 'Raksha24x7Secret123']);
+const weakDefaults = new Set(['secret', 'password', 'changeme', 'replace_with_strong_secret', 'replace_with_separate_strong_admin_secret', 'replace_with_signed_cookie_secret', 'Raksha24x7Secret123']);
 
 const hasValue = (key) => Boolean(String(process.env[key] || '').trim());
 const mask = (value = '') => `${String(value).slice(0, 3)}***${String(value).slice(-3)}`;
@@ -38,12 +46,21 @@ export const validateEnvironment = () => {
 
   validateSecret('JWT_SECRET', errors, warnings);
   validateSecret('ADMIN_JWT_SECRET', errors, warnings);
+  validateSecret('COOKIE_SECRET', errors, warnings);
+  validateSecret('SESSION_SECRET', errors, warnings);
 
   if (isProduction) {
-    for (const key of productionRecommended) {
+    for (const key of requiredProduction) {
       if (!hasValue(key)) errors.push(`Missing production environment variable: ${key}`);
     }
-    if (!smtpConfigured()) warnings.push('No production email provider is fully configured. Set EMAIL_*, SMTP_* or RESEND_API_KEY.');
+    if (!smtpConfigured()) errors.push('Missing production email provider configuration. Set EMAIL_*, SMTP_* or RESEND_API_KEY.');
+    if (!hasValue('CORS_ORIGINS') && !hasValue('ALLOWED_ORIGINS')) warnings.push('CORS_ORIGINS is not set. CLIENT_URL will be the only browser origin allowed.');
+    if (appConfig.clientUrl.includes('localhost') || appConfig.serverUrl.includes('localhost')) {
+      errors.push('Production CLIENT_URL and SERVER_URL must not use localhost.');
+    }
+    if (!String(process.env.MONGODB_URI || '').includes('mongodb+srv://')) {
+      warnings.push('Production MongoDB should usually use a MongoDB Atlas mongodb+srv:// URI.');
+    }
   }
 
   if (process.env.JWT_SECRET && process.env.ADMIN_JWT_SECRET && process.env.JWT_SECRET === process.env.ADMIN_JWT_SECRET) {

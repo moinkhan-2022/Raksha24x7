@@ -1,6 +1,7 @@
 import os from 'node:os';
 import mongoose from 'mongoose';
 import { performanceLog } from '../config/logger.js';
+import { emailProviderStatus } from '../email/services/emailProvider.service.js';
 
 const metrics = {
   startedAt: new Date(),
@@ -83,6 +84,7 @@ export const getHealthSnapshot = async () => {
   const memory = checkMemoryHealth();
   const cpuUsage = process.cpuUsage();
   const database = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+  const email = emailProviderStatus();
   let mongoPingMs = null;
 
   if (database === 'connected') {
@@ -108,7 +110,8 @@ export const getHealthSnapshot = async () => {
     loadAverage: os.loadavg(),
     database,
     mongoPingMs,
-    smtp: process.env.SMTP_HOST || process.env.EMAIL_PROVIDER ? 'configured' : 'not_configured',
+    smtp: email.smtpConfigured || email.resendConfigured ? 'configured' : 'not_configured',
+    emailProvider: email.provider,
     jwt: process.env.JWT_SECRET && process.env.ADMIN_JWT_SECRET ? 'configured' : 'missing',
     version: process.env.npm_package_version || '1.0.0',
     metrics: getMetricsSnapshot()
