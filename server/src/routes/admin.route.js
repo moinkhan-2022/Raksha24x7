@@ -9,10 +9,25 @@ import {
   getAdminMe,
   getAdminProfile,
   getAdminSessions,
-  getAdminSettings,
   updateAdminProfile,
-  updateAdminSettings
 } from '../controllers/admin.controller.js';
+import {
+  createEmergencyNumber,
+  deleteEmergencyNumber,
+  getAdminSettings,
+  getEmailTemplateSettings,
+  listEmergencyNumbers,
+  sendEmailTemplateTest,
+  testSmtpSettings,
+  updateApplicationSettings,
+  updateEmailTemplateSetting,
+  updateEmergencyNumber,
+  updateGeneralSettings,
+  updateMaintenanceSettings,
+  updateSecuritySettings,
+  updateSmtpSettings,
+  updateThemeSettings
+} from '../controllers/adminSettings.controller.js';
 import {
   getDashboardActivity,
   getDashboardEmails,
@@ -101,7 +116,21 @@ router.post('/email/retry/:id', retryAdminEmail);
 router.post('/email/retry-failed', retryFailedAdminEmails);
 router.post('/email/export', exportAdminEmailLogs);
 router.get('/settings', getAdminSettings);
-router.put('/settings', updateAdminSettings);
+router.put('/settings', updateGeneralSettings);
+router.patch('/settings/general', updateGeneralSettings);
+router.patch('/settings/smtp', updateSmtpSettings);
+router.patch('/settings/theme', updateThemeSettings);
+router.patch('/settings/application', updateApplicationSettings);
+router.patch('/settings/security', updateSecuritySettings);
+router.patch('/settings/maintenance', updateMaintenanceSettings);
+router.get('/settings/email-templates', getEmailTemplateSettings);
+router.patch('/settings/email-template/:id', updateEmailTemplateSetting);
+router.post('/settings/email-template/test', sendEmailTemplateTest);
+router.get('/settings/emergency-numbers', listEmergencyNumbers);
+router.post('/settings/emergency-numbers', createEmergencyNumber);
+router.patch('/settings/emergency-numbers/:id', updateEmergencyNumber);
+router.delete('/settings/emergency-numbers/:id', deleteEmergencyNumber);
+router.post('/settings/smtp/test', testSmtpSettings);
 router.get('/users/export', exportAdminUsers);
 router.post('/users/export', exportAdminUsers);
 router.get('/users', listAdminUsers);
