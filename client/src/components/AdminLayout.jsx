@@ -10,6 +10,7 @@ const navItems = [
   { label: 'Dashboard', to: '/admin/dashboard', icon: LayoutDashboard },
   { label: 'Users', to: '/admin/users', icon: Users },
   { label: 'SOS Monitoring', to: '/admin/sos', icon: ShieldAlert },
+  { label: 'Email Logs', to: '/admin/email', icon: FileText },
   { label: 'Emergency Numbers', to: '/emergency-numbers', icon: ShieldAlert },
   { label: 'Safety Tips', to: '/admin/dashboard?section=safety-tips', icon: Megaphone },
   { label: 'Reports', to: '/admin/dashboard?section=reports', icon: FileText },

@@ -33,6 +33,15 @@ import {
   updateSosNotes
 } from '../controllers/adminSos.controller.js';
 import {
+  exportAdminEmailLogs,
+  getAdminEmailLogDetails,
+  getAdminEmailStatistics,
+  listAdminEmailLogs,
+  listAdminEmailQueue,
+  retryAdminEmail,
+  retryFailedAdminEmails
+} from '../controllers/adminEmail.controller.js';
+import {
   bulkAdminUserAction,
   activateAdminUser,
   deleteAdminUser,
@@ -84,6 +93,13 @@ router.get('/sos/:id', getAdminSosDetails);
 router.patch('/sos/:id/review', markSosReviewed);
 router.patch('/sos/:id/notes', updateSosNotes);
 router.post('/sos/export', exportAdminSos);
+router.get('/email/logs', listAdminEmailLogs);
+router.get('/email/logs/:id', getAdminEmailLogDetails);
+router.get('/email/queue', listAdminEmailQueue);
+router.get('/email/statistics', getAdminEmailStatistics);
+router.post('/email/retry/:id', retryAdminEmail);
+router.post('/email/retry-failed', retryFailedAdminEmails);
+router.post('/email/export', exportAdminEmailLogs);
 router.get('/settings', getAdminSettings);
 router.put('/settings', updateAdminSettings);
 router.get('/users/export', exportAdminUsers);
