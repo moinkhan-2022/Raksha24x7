@@ -93,6 +93,14 @@ const sosSchema = new mongoose.Schema(
       default: 'preparing',
       index: true
     },
+    adminReview: {
+      reviewed: { type: Boolean, default: false, index: true },
+      reviewedAt: { type: Date, default: null },
+      reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', default: null },
+      notes: { type: String, default: '', trim: true, maxlength: 2000 },
+      notesUpdatedAt: { type: Date, default: null },
+      notesUpdatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', default: null }
+    },
     resolvedAt: { type: Date, default: null },
     resolvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
   },

@@ -23,6 +23,16 @@ import {
   getDashboardUsers
 } from '../controllers/adminDashboard.controller.js';
 import {
+  exportAdminSos,
+  getAdminSosByStatus,
+  getAdminSosDetails,
+  getAdminSosTimeline,
+  getAdminSosTracking,
+  listAdminSos,
+  markSosReviewed,
+  updateSosNotes
+} from '../controllers/adminSos.controller.js';
+import {
   bulkAdminUserAction,
   activateAdminUser,
   deleteAdminUser,
@@ -64,6 +74,16 @@ router.get('/dashboard/emails', getDashboardEmails);
 router.get('/dashboard/notifications', getDashboardNotifications);
 router.get('/dashboard/activity', getDashboardActivity);
 router.get('/dashboard/system-health', getDashboardSystemHealth);
+router.get('/sos/active', getAdminSosByStatus('active'));
+router.get('/sos/completed', getAdminSosByStatus('completed'));
+router.get('/sos/failed', getAdminSosByStatus('failed'));
+router.get('/sos', listAdminSos);
+router.get('/sos/:id/timeline', getAdminSosTimeline);
+router.get('/sos/:id/tracking', getAdminSosTracking);
+router.get('/sos/:id', getAdminSosDetails);
+router.patch('/sos/:id/review', markSosReviewed);
+router.patch('/sos/:id/notes', updateSosNotes);
+router.post('/sos/export', exportAdminSos);
 router.get('/settings', getAdminSettings);
 router.put('/settings', updateAdminSettings);
 router.get('/users/export', exportAdminUsers);

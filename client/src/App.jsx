@@ -30,6 +30,7 @@ const loadEmergencyNumbersPage = () => import('./pages/EmergencyNumbersPage');
 const loadAdminLoginPage = () => import('./pages/admin/AdminLoginPage');
 const loadAdminDashboardPage = () => import('./pages/admin/AdminDashboardPage');
 const loadAdminUsersPage = () => import('./pages/admin/AdminUsersPage');
+const loadAdminSosPage = () => import('./pages/admin/AdminSosPage');
 const loadAdminProfilePage = () => import('./pages/admin/AdminProfilePage');
 const loadAdminSettingsPage = () => import('./pages/admin/AdminSettingsPage');
 const loadAdminSessionsPage = () => import('./pages/admin/AdminSessionsPage');
@@ -48,6 +49,7 @@ const EmergencyNumbersPage = lazy(loadEmergencyNumbersPage);
 const AdminLoginPage = lazy(loadAdminLoginPage);
 const AdminDashboardPage = lazy(loadAdminDashboardPage);
 const AdminUsersPage = lazy(loadAdminUsersPage);
+const AdminSosPage = lazy(loadAdminSosPage);
 const AdminProfilePage = lazy(loadAdminProfilePage);
 const AdminSettingsPage = lazy(loadAdminSettingsPage);
 const AdminSessionsPage = lazy(loadAdminSessionsPage);
@@ -117,6 +119,7 @@ function App() {
         <Route path="/admin/login" element={<Suspense fallback={<PageSkeleton />}><AdminLoginPage /></Suspense>} />
         <Route path="/admin/dashboard" element={<AdminProtectedRoute><Suspense fallback={<PageSkeleton />}><AdminDashboardPage /></Suspense></AdminProtectedRoute>} />
         <Route path="/admin/users" element={<AdminProtectedRoute><Suspense fallback={<PageSkeleton />}><AdminUsersPage /></Suspense></AdminProtectedRoute>} />
+        <Route path="/admin/sos" element={<AdminProtectedRoute><Suspense fallback={<PageSkeleton />}><AdminSosPage /></Suspense></AdminProtectedRoute>} />
         <Route path="/admin/profile" element={<AdminProtectedRoute><Suspense fallback={<PageSkeleton />}><AdminProfilePage /></Suspense></AdminProtectedRoute>} />
         <Route path="/admin/sessions" element={<AdminProtectedRoute><Suspense fallback={<PageSkeleton />}><AdminSessionsPage /></Suspense></AdminProtectedRoute>} />
         <Route path="/admin/settings" element={<AdminProtectedRoute><Suspense fallback={<PageSkeleton />}><AdminSettingsPage /></Suspense></AdminProtectedRoute>} />
