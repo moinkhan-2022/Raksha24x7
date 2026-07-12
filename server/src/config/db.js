@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import logger from './logger.js';
 
 export const connectDB = async () => {
   const { MONGODB_URI } = process.env;
@@ -8,6 +9,5 @@ export const connectDB = async () => {
   }
 
   await mongoose.connect(MONGODB_URI);
-  // eslint-disable-next-line no-console
-  console.log('MongoDB connected');
+  logger.info('MongoDB connected');
 };

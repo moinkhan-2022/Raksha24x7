@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import User from '../models/user.model.js';
 import { sendPasswordChangedEmail } from '../utils/email.js';
 import { validateStrongPassword } from '../utils/passwordPolicy.js';
+import { logUserActivity } from '../config/logger.js';
 
 const safeUser = (user) => ({
   id: user._id,
@@ -42,6 +43,7 @@ export const updateProfile = async (req, res) => {
       bloodGroup: (bloodGroup || '').trim(),
       medicalNotes: (medicalNotes || '').trim()
     }, { new: true, runValidators: true }).select('-password');
+    logUserActivity('Profile updated', { requestId: req.requestId, userId: req.user._id });
     return res.status(200).json({ success: true, message: 'Profile updated', user: safeUser(user) });
   } catch {
     return res.status(500).json({ success: false, message: 'Server error' });
@@ -62,6 +64,7 @@ export const addContact = async (req, res) => {
   if (exists) return res.status(409).json({ success: false, message: 'Duplicate contact not allowed' });
   user.contacts.push({ name: name.trim(), relationship: relationship.trim(), phone: phone.trim(), isPrimary: user.contacts.length === 0 });
   await user.save();
+  logUserActivity('Emergency contact added', { requestId: req.requestId, userId: req.user._id });
   return res.status(201).json({ success: true, contacts: user.contacts });
 };
 
@@ -78,6 +81,7 @@ export const updateContact = async (req, res) => {
   contact.relationship = relationship.trim();
   contact.phone = phone.trim();
   await user.save();
+  logUserActivity('Emergency contact updated', { requestId: req.requestId, userId: req.user._id, contactId: id });
   return res.status(200).json({ success: true, contacts: user.contacts });
 };
 
@@ -90,6 +94,7 @@ export const deleteContact = async (req, res) => {
   contact.deleteOne();
   if (wasPrimary && user.contacts.length > 0) user.contacts[0].isPrimary = true;
   await user.save();
+  logUserActivity('Emergency contact deleted', { requestId: req.requestId, userId: req.user._id, contactId: id });
   return res.status(200).json({ success: true, contacts: user.contacts });
 };
 
@@ -129,6 +134,7 @@ export const changePassword = async (req, res) => {
     await user.save();
 
     await sendPasswordChangedEmail({ to: user.email, name: user.name });
+    logUserActivity('Password changed', { requestId: req.requestId, userId: req.user._id });
 
     return res.status(200).json({ success: true, message: 'Password updated' });
   } catch {

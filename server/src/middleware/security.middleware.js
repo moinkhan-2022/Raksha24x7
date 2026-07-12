@@ -2,6 +2,7 @@ import compression from 'compression';
 import hpp from 'hpp';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { permissionsPolicy } from '../config/security.js';
+import { logSecurityEvent } from '../config/logger.js';
 
 const DANGEROUS_KEYS = new Set(['$where', '$regex', '$ne', '$gt', '$gte', '$lt', '$lte', '$or', '$and', '$nor', '$expr', '$function']);
 const SCRIPT_PATTERN = /<\s*\/?\s*script\b[^>]*>/gi;
@@ -23,6 +24,7 @@ const sanitizeObject = (value) => {
     if (key.startsWith('$') || key.includes('.') || DANGEROUS_KEYS.has(key)) {
       const error = new Error('Potential NoSQL injection operator rejected.');
       error.status = 400;
+      error.securityEvent = 'Suspicious request payload rejected';
       throw error;
     }
     value[key] = sanitizeObject(value[key]);
@@ -37,6 +39,7 @@ export const requestSanitizer = (req, res, next) => {
     if (req.params) sanitizeObject(req.params);
     return next();
   } catch (error) {
+    logSecurityEvent(error.securityEvent || 'Malformed request payload rejected', { requestId: req.requestId, path: req.originalUrl, ip: req.ip, message: error.message });
     return res.status(error.status || 400).json({ success: false, message: error.message || 'Malformed request payload.' });
   }
 };
@@ -54,8 +57,9 @@ const ipKey = (req) => ipKeyGenerator(req.ip);
 const userOrIpKey = (req) => String(req.user?._id || req.admin?._id || ipKey(req));
 
 const logRateLimit = (req, scope) => {
-  console.warn('[RATE_LIMIT_BLOCKED]', {
+  logSecurityEvent('Rate limit triggered', {
     scope,
+    requestId: req.requestId,
     ip: req.ip,
     method: req.method,
     path: req.originalUrl,

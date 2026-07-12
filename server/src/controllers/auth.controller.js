@@ -15,6 +15,7 @@ import { FirebaseAuthError, verifyGoogleIdToken } from '../services/firebaseAuth
 import EmailVerificationToken from '../email/models/emailVerificationToken.model.js';
 import PasswordResetToken from '../email/models/passwordResetToken.model.js';
 import { validateStrongPassword } from '../utils/passwordPolicy.js';
+import { logError, logSecurityEvent, logUserActivity } from '../config/logger.js';
 
 const VERIFICATION_EXPIRE_MS = 24 * 60 * 60 * 1000;
 const RESET_EXPIRE_MS = 30 * 60 * 1000;
@@ -116,8 +117,7 @@ const sendAuthEmailSafely = async (task) => {
     return await task();
   } catch (error) {
     // Email must never break account access in local/dev provider states.
-    // eslint-disable-next-line no-console
-    console.error('[email] delivery failed:', error.message);
+    logError(error, { scope: 'auth_email_delivery' });
     return null;
   }
 };
@@ -181,6 +181,7 @@ export const register = async (req, res) => {
     });
     await user.save();
     await sendAuthEmailSafely(() => sendWelcomeEmail({ to: user.email, name: user.name, userId: user._id }));
+    logUserActivity('User registered', { requestId: req.requestId, userId: user._id, provider: 'email', ip: req.ip });
 
     const token = signToken({ id: user._id, role: user.role });
 
@@ -203,9 +204,13 @@ export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email }).select('+password');
-    if (!user) return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    if (!user) {
+      logSecurityEvent('Failed user login - account not found', { requestId: req.requestId, email, ip: req.ip });
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    }
     const ok = await user.comparePassword(password);
     if (!ok) {
+      logSecurityEvent('Failed user login - invalid password', { requestId: req.requestId, userId: user._id, ip: req.ip });
       if (user.authProvider === 'google' && !user.password) {
         return res.status(400).json({
           success: false,
@@ -219,6 +224,7 @@ export const login = async (req, res) => {
     user.lastLogin = new Date();
     await user.save({ validateBeforeSave: false });
     await sendAuthEmailSafely(() => sendLoginSecurityAlertEmail({ to: user.email, name: user.name, userId: user._id, req }));
+    logUserActivity('User login', { requestId: req.requestId, userId: user._id, provider: 'email', ip: req.ip });
     const token = signToken({ id: user._id, role: user.role });
     return res.status(200).json({ success: true, message: 'Login successful', token, user: safeUser(user) });
   } catch {
@@ -282,6 +288,7 @@ export const googleSignIn = async (req, res) => {
     } else {
       await sendAuthEmailSafely(() => sendLoginSecurityAlertEmail({ to: user.email, name: user.name, userId: user._id, req }));
     }
+    logUserActivity(isNewUser ? 'Google user registered' : 'Google user login', { requestId: req.requestId, userId: user._id, provider: 'google', ip: req.ip });
     const token = signToken({ id: user._id, role: user.role });
 
     return res.status(200).json({
@@ -293,6 +300,7 @@ export const googleSignIn = async (req, res) => {
       needsPasswordSetup: Boolean(user.passwordSetupRequired)
     });
   } catch (error) {
+    logError(error, { scope: 'google_sign_in', requestId: req.requestId });
     return res.status(500).json({
       success: false,
       message: "Google sign-in failed"
@@ -314,6 +322,7 @@ export const setupPassword = async (req, res) => {
     user.passwordChangedAt = new Date();
     await user.save();
     await sendAuthEmailSafely(() => sendPasswordChangedEmail({ to: user.email, name: user.name, userId: user._id, req }));
+    logUserActivity('Password setup completed', { requestId: req.requestId, userId: user._id, ip: req.ip });
 
     return res.status(200).json({ success: true, message: 'Password created successfully.', user: safeUser(user) });
   } catch {
@@ -346,6 +355,7 @@ export const completeProfile = async (req, res) => {
     ).select('+emailVerificationToken +emailVerificationExpire +emailVerificationLastSentAt');
 
     if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+    logUserActivity('Profile completed', { requestId: req.requestId, userId: user._id, ip: req.ip });
     let verificationSent = false;
     if (user.authProvider === 'email' && !user.isEmailVerified) {
       const rawToken = attachVerificationToken(user);
@@ -395,6 +405,7 @@ export const verifyEmail = async (req, res) => {
     await user.save({ validateBeforeSave: false });
     await markVerificationTokenUsed(token);
     await sendAuthEmailSafely(() => sendEmailVerifiedEmail({ to: user.email, name: user.name, userId: user._id }));
+    logUserActivity('Email verified', { requestId: req.requestId, userId: user._id, ip: req.ip });
 
     return res.status(200).json({ success: true, message: 'Email verified successfully.' });
   } catch {
@@ -495,6 +506,7 @@ export const forgotPassword = async (req, res) => {
 
       const resetUrl = `${clientUrl()}/auth/reset-password/${rawToken}`;
       await sendAuthEmailSafely(() => sendPasswordResetEmail({ to: user.email, name: user.name, userId: user._id, resetUrl }));
+      logUserActivity('Forgot password requested', { requestId: req.requestId, userId: user._id, ip: req.ip });
     }
 
     return res.status(200).json({ success: true, message: 'If this email exists, a password reset link has been sent.' });
@@ -531,6 +543,7 @@ export const resetPassword = async (req, res) => {
     await user.save();
     await markPasswordResetTokenUsed(token);
     await sendAuthEmailSafely(() => sendPasswordChangedEmail({ to: user.email, name: user.name, userId: user._id, req }));
+    logUserActivity('Password reset completed', { requestId: req.requestId, userId: user._id, ip: req.ip });
 
     return res.status(200).json({ success: true, message: 'Password reset successful' });
   } catch {
@@ -558,9 +571,13 @@ export const changePassword = async (req, res) => {
     user.passwordChangedAt = new Date();
     await user.save();
     await sendAuthEmailSafely(() => sendPasswordChangedEmail({ to: user.email, name: user.name, userId: user._id, req }));
+    logUserActivity('Password changed', { requestId: req.requestId, userId: user._id, ip: req.ip });
     return res.status(200).json({ success: true, message: 'Password updated successfully' });
   } catch {
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 };
-export const logout = async (req, res) => res.status(200).json({ success: true, message: 'Logged out successfully' });
+export const logout = async (req, res) => {
+  logUserActivity('User logout', { requestId: req.requestId, userId: req.user?._id, ip: req.ip });
+  return res.status(200).json({ success: true, message: 'Logged out successfully' });
+};

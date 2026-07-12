@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import AdminSession from '../models/adminSession.model.js';
 import AdminAuditLog from '../models/adminAuditLog.model.js';
 import { jwtConfig } from '../config/security.js';
+import { logAdminActivity } from '../config/logger.js';
 
 const DEFAULT_ADMIN_EXPIRES_IN = '8h';
 const REMEMBER_ADMIN_EXPIRES_IN = '30d';
@@ -54,10 +55,15 @@ export const writeAdminAuditLog = async ({ req, adminId = null, action, status =
       message,
       ipAddress: req ? getClientIp(req) : '',
       browser: parsed.browser,
+      operatingSystem: parsed.operatingSystem,
+      device: parsed.device,
       userAgent,
+      requestId: req?.requestId || '',
       metadata
     });
-  } catch {
+    logAdminActivity(action, { status, adminId, message, requestId: req?.requestId, ...parsed, metadata });
+  } catch (error) {
+    logAdminActivity('admin_audit_log_failed', { status: 'failed', action, message: error.message, requestId: req?.requestId });
     return undefined;
   }
 };

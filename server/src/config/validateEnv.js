@@ -1,4 +1,5 @@
 import { isProduction } from './security.js';
+import logger from './logger.js';
 
 const requiredAlways = ['MONGODB_URI', 'JWT_SECRET', 'ADMIN_JWT_SECRET'];
 const productionRecommended = ['CLIENT_URL', 'GOOGLE_CLIENT_ID'];
@@ -50,7 +51,7 @@ export const validateEnvironment = () => {
   }
 
   if (warnings.length) {
-    warnings.forEach((message) => console.warn(`[env warning] ${message}`));
+    warnings.forEach((message) => logger.warn('Environment warning', { message }));
   }
 
   if (errors.length) {

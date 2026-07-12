@@ -1,5 +1,6 @@
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { logError, logSecurityEvent } from '../config/logger.js';
 
 const requiredFirebaseAdminEnv = [
   'FIREBASE_PROJECT_ID',
@@ -15,7 +16,7 @@ const privateKey = () => {
 const adminAppCount = () => getApps().length;
 
 const logFirebaseAdminEnv = () => {
-  console.log('Firebase Admin env:', {
+  logSecurityEvent('Firebase Admin env check', {
     FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || undefined,
     FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || undefined,
     FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY ? '[MASKED]' : undefined
@@ -24,7 +25,7 @@ const logFirebaseAdminEnv = () => {
 
 const validateFirebaseAdminEnv = () => {
   const missing = requiredFirebaseAdminEnv.filter((key) => !process.env[key]);
-  missing.forEach((key) => console.error(`Missing ${key}`));
+  missing.forEach((key) => logSecurityEvent('Missing Firebase Admin environment variable', { key }));
   if (missing.length) logFirebaseAdminEnv();
   return missing.length === 0;
 };
@@ -51,14 +52,10 @@ export const initializeFirebaseAdmin = () => {
     }
     return true;
   } catch (error) {
-    console.error("=========== FIREBASE ERROR ===========");
-    console.error(error);
-    console.error("Message:", error.message);
-    console.error("Code:", error.code);
-    console.error("Stack:", error.stack);
+    logError(error, { scope: 'firebase_admin_initialization', code: error.code });
     logFirebaseAdminEnv();
     return false;
-}
+  }
 };
 
 export const verifyGoogleIdToken = async (idToken) => {
@@ -72,6 +69,7 @@ export const verifyGoogleIdToken = async (idToken) => {
   try {
     return await getAuth().verifyIdToken(idToken);
   } catch (error) {
+    logSecurityEvent('Firebase token verification failed', { code: error?.errorInfo?.code || error?.code });
     const code = error?.errorInfo?.code || error?.code || '';
     if (code.includes('id-token-expired')) {
       throw new FirebaseAuthError('Firebase ID token has expired. Please sign in again.', 401, 'EXPIRED_FIREBASE_TOKEN');

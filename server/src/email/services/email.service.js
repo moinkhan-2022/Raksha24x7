@@ -2,6 +2,8 @@ import EmailLog from '../models/emailLog.model.js';
 import EmailQueue from '../models/emailQueue.model.js';
 import { emailTemplates } from '../templates/email.templates.js';
 import { emailProviderStatus, sendViaProvider } from './emailProvider.service.js';
+import logger, { logError } from '../../config/logger.js';
+import { recordTimedOperation } from '../../services/monitoring.service.js';
 
 const shouldSkipDelivery = () => {
   const status = emailProviderStatus();
@@ -44,19 +46,18 @@ export const sendEmail = async ({
     log.error = `${providerStatus.provider} email provider is not configured.`;
     log.lastAttemptAt = new Date();
     await log.save();
-    // eslint-disable-next-line no-console
-    console.log(`[email:dev] ${subject} -> ${to}`);
+    logger.info('Email skipped because provider is not configured', { template, provider: providerStatus.provider, userId });
     return { skipped: true, logId: log._id, provider: providerStatus.provider };
   }
 
   try {
-    const result = await sendViaProvider({
+    const result = await recordTimedOperation('email.send', () => sendViaProvider({
       to,
       subject,
       html,
       text,
       attachments: attachments.length ? attachments : inlineImages
-    });
+    }), { template, userId, provider: providerStatus.provider });
     log.status = 'sent';
     log.provider = result.provider || providerStatus.provider;
     log.messageId = result.messageId || '';
@@ -70,6 +71,7 @@ export const sendEmail = async ({
     log.retryCount = Number(log.retryCount || 0) + 1;
     log.lastAttemptAt = new Date();
     await log.save();
+    logError(error, { scope: 'email_send', template, provider: providerStatus.provider, userId });
     throw error;
   }
 };

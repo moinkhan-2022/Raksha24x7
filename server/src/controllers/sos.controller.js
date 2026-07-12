@@ -7,6 +7,8 @@ import {
   retryEmergencyDeliveries,
   stopEmergencyEvent
 } from '../services/emergencyNotification.service.js';
+import { logError, logUserActivity } from '../config/logger.js';
+import { recordTimedOperation } from '../services/monitoring.service.js';
 
 const publicSos = (sos) => {
   const plain = typeof sos?.toObject === 'function' ? sos.toObject() : sos;
@@ -17,12 +19,14 @@ const publicSos = (sos) => {
 
 const handleError = (res, error, fallback = 'SOS request failed') => {
   const status = error?.statusCode || 500;
+  logError(error, { scope: 'sos', statusCode: status });
   return res.status(status).json({ success: false, message: error?.message || fallback });
 };
 
 export const startSos = async (req, res) => {
   try {
-    const result = await createEmergencyEvent({ userId: req.user._id, payload: req.body || {} });
+    const result = await recordTimedOperation('sos.create', () => createEmergencyEvent({ userId: req.user._id, payload: req.body || {} }), { requestId: req.requestId, userId: req.user._id });
+    logUserActivity('SOS created', { requestId: req.requestId, userId: req.user._id, sosId: result.sos?._id });
     return res.status(201).json({
       success: true,
       message: 'SOS emergency communication started.',
@@ -44,6 +48,7 @@ export const stopSos = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(sosId)) return res.status(400).json({ success: false, message: 'Valid SOS ID is required.' });
     const sos = await stopEmergencyEvent({ userId: req.user._id, sosId });
     if (!sos) return res.status(404).json({ success: false, message: 'SOS event not found.' });
+    logUserActivity('SOS completed', { requestId: req.requestId, userId: req.user._id, sosId });
     return res.status(200).json({ success: true, message: 'SOS resolved and live tracking stopped.', sos: publicSos(sos) });
   } catch (error) {
     return handleError(res, error, 'Failed to stop SOS');
@@ -56,6 +61,7 @@ export const shareLocation = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(sosId)) return res.status(400).json({ success: false, message: 'Valid SOS ID is required.' });
     const sos = await appendLocationUpdate({ userId: req.user._id, sosId, payload: req.body || {} });
     if (!sos) return res.status(404).json({ success: false, message: 'SOS event not found.' });
+    logUserActivity('Live location updated', { requestId: req.requestId, userId: req.user._id, sosId });
     return res.status(200).json({ success: true, message: 'Live location updated.', sos: publicSos(sos) });
   } catch (error) {
     return handleError(res, error, 'Failed to share location');

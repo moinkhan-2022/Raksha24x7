@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import Location from '../models/location.model.js';
+import { logUserActivity } from '../config/logger.js';
 
 const coordinatesAreValid = (latitude, longitude) => (
   Number.isFinite(latitude)
@@ -56,6 +57,7 @@ export const saveLocation = async (req, res) => {
       timestamp,
       trackingMode
     });
+    logUserActivity(trackingMode === 'live' ? 'Live location updated' : 'Location saved', { requestId: req.requestId, userId: req.user._id, trackingMode });
 
     return res.status(201).json({ success: true, message: 'Location saved', location });
   } catch {

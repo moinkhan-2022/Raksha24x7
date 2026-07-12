@@ -29,6 +29,7 @@ import {
   userLoginRateLimit
 } from './middleware/security.middleware.js';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware.js';
+import { requestContext, requestLogger } from './middleware/requestLogger.middleware.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -40,6 +41,8 @@ app.use(compressionMiddleware);
 app.use(cookieParser(process.env.COOKIE_SECRET || process.env.JWT_SECRET));
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
+app.use(requestContext);
+app.use(requestLogger);
 app.use(requestSanitizer);
 app.use(hppProtection);
 app.use('/api', globalRateLimit);

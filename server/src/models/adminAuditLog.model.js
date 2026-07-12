@@ -8,7 +8,10 @@ const adminAuditLogSchema = new mongoose.Schema(
     message: { type: String, default: '' },
     ipAddress: { type: String, default: '' },
     browser: { type: String, default: 'Unknown browser' },
+    operatingSystem: { type: String, default: 'Unknown OS' },
+    device: { type: String, default: 'Unknown device' },
     userAgent: { type: String, default: '' },
+    requestId: { type: String, default: '', index: true },
     metadata: { type: mongoose.Schema.Types.Mixed, default: {} }
   },
   { timestamps: true }
