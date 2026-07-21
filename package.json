@@ -12,7 +12,8 @@
     "dev:client": "npm run dev --prefix client",
     "dev:server": "npm run dev --prefix server",
     "build": "npm run build --prefix client",
-    "start": "npm run start --prefix server"
+    "start": "npm run start --prefix server",
+    "create-admin": "node server/scripts/createAdmin.js"
   },
   "devDependencies": {
     "concurrently": "^9.0.1"

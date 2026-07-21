@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  CheckCircle2, Eye, EyeOff, Mail, Palette, Phone, RefreshCw,
-  Save, Settings, Shield, SlidersHorizontal, Trash2, Wrench, X
+  CheckCircle2, Eye, EyeOff, Mail, Palette, RefreshCw,
+  Save, Settings, Shield, SlidersHorizontal, Wrench, X
 } from 'lucide-react';
 import AdminLayout from '../../components/AdminLayout';
 import { useAdminAuth } from '../../context/AdminAuthContext';
 import { adminApi } from '../../services/api';
 
 const clone = (value) => JSON.parse(JSON.stringify(value || {}));
-const defaultEmergencyForm = { service: '', number: '', category: 'police', country: 'IN', state: 'All States', city: 'All Cities', enabled: true, priority: 50, description: '' };
 
 function AdminSettingsPage() {
   const isLight = localStorage.getItem('raksha_theme') === 'light';
@@ -18,9 +17,6 @@ function AdminSettingsPage() {
   const [forms, setForms] = useState({});
   const [templates, setTemplates] = useState([]);
   const [templateDraft, setTemplateDraft] = useState(null);
-  const [numbers, setNumbers] = useState([]);
-  const [numberForm, setNumberForm] = useState(defaultEmergencyForm);
-  const [editingNumber, setEditingNumber] = useState(null);
   const [backup, setBackup] = useState({});
   const [history, setHistory] = useState([]);
   const [active, setActive] = useState('general');
@@ -43,7 +39,6 @@ function AdminSettingsPage() {
         security: clone(data.settings.security)
       });
       setTemplates(data.emailTemplates || []);
-      setNumbers(data.emergencyNumbers || []);
       setBackup(data.backup || {});
       setHistory(data.history || []);
     } catch (error) {
@@ -59,7 +54,6 @@ function AdminSettingsPage() {
     ['general', 'General', Settings],
     ['smtp', 'SMTP & Email', Mail],
     ['templates', 'Email Templates', Mail],
-    ['numbers', 'Emergency Numbers', Phone],
     ['application', 'Application', SlidersHorizontal],
     ['theme', 'Theme', Palette],
     ['maintenance', 'Maintenance', Wrench],
@@ -126,50 +120,14 @@ function AdminSettingsPage() {
     }
   };
 
-  const loadNumbers = async () => {
-    const { data } = await adminApi.settingsEmergencyNumbers({ limit: 50 });
-    setNumbers(data.items || []);
-  };
-
-  const saveNumber = async () => {
-    if (!canWrite) return setMessage('Your admin role has read-only settings access.');
-    try {
-      if (editingNumber) await adminApi.updateSettingsEmergencyNumber(editingNumber, numberForm);
-      else await adminApi.createSettingsEmergencyNumber(numberForm);
-      setMessage(editingNumber ? 'Emergency number updated.' : 'Emergency number added.');
-      setNumberForm(defaultEmergencyForm);
-      setEditingNumber(null);
-      await loadNumbers();
-    } catch (error) {
-      setMessage(error.response?.data?.message || 'Could not save emergency number.');
-    }
-  };
-
-  const editNumber = (item) => {
-    setEditingNumber(item._id);
-    setNumberForm({ service: item.service, number: item.number, category: item.category, country: item.country, state: item.state, city: item.city, enabled: item.enabled, priority: item.priority, description: item.description });
-  };
-
-  const deleteNumber = async (id) => {
-    if (!canWrite) return setMessage('Your admin role has read-only settings access.');
-    if (!window.confirm('Delete this emergency number?')) return;
-    try {
-      await adminApi.deleteSettingsEmergencyNumber(id);
-      setMessage('Emergency number deleted.');
-      await loadNumbers();
-    } catch (error) {
-      setMessage(error.response?.data?.message || 'Could not delete emergency number.');
-    }
-  };
-
   return (
     <AdminLayout title="System Settings" subtitle="Central configuration for Raksha24x7 application, security, email, theme and maintenance.">
-      {message ? <div className="mb-4 flex items-center justify-between rounded-2xl border border-blue-400/30 bg-blue-500/10 px-4 py-3 text-sm text-blue-200"><span>{message}</span><button type="button" onClick={() => setMessage('')}><X className="h-4 w-4" /></button></div> : null}
+      {message ? <div className={`mb-4 flex items-center justify-between rounded-2xl border px-4 py-3 text-sm shadow-sm ${isLight ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-blue-400/30 bg-blue-500/10 text-blue-100'}`}><span>{message}</span><button type="button" aria-label="Dismiss message" onClick={() => setMessage('')} className="rounded-lg p-1 hover:bg-white/10"><X className="h-4 w-4" /></button></div> : null}
       {loading ? <div className={`h-96 animate-pulse rounded-3xl ${isLight ? 'bg-white' : 'bg-white/5'}`} /> : (
-        <div className="grid gap-5 xl:grid-cols-[280px_1fr]">
-          <aside className={`rounded-3xl border p-3 shadow-sm ${isLight ? 'border-slate-200 bg-white' : 'border-white/10 bg-white/[0.05]'}`}>
-            <div className="grid gap-2">
-              {tabs.map(([key, label, Icon]) => <button key={key} type="button" onClick={() => setActive(key)} className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-bold transition ${active === key ? 'bg-red-600 text-white' : isLight ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-300 hover:bg-white/10'}`}><Icon className="h-4 w-4" />{label}</button>)}
+        <div className="grid items-start gap-5 xl:grid-cols-[260px_minmax(0,1fr)]">
+          <aside className={`sticky top-24 rounded-3xl border p-2 shadow-sm ${isLight ? 'border-slate-200 bg-white' : 'border-white/10 bg-white/[0.045]'}`}>
+            <div className="grid gap-1">
+              {tabs.map(([key, label, Icon]) => <button key={key} type="button" onClick={() => setActive(key)} className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-bold transition ${active === key ? 'bg-red-600 text-white shadow-lg shadow-red-950/20' : isLight ? 'text-slate-600 hover:bg-slate-100 hover:text-slate-950' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`}><Icon className="h-4 w-4" />{label}</button>)}
             </div>
           </aside>
 
@@ -179,8 +137,6 @@ function AdminSettingsPage() {
             {active === 'smtp' ? <SettingsCard title="SMTP & Email" icon={Mail} isLight={isLight}><Grid><Select label="Email Provider" value={forms.smtp.provider} options={['resend', 'smtp', 'gmail', 'sendgrid', 'mailgun', 'ses']} onChange={(v) => updateForm('smtp', 'provider', v)} isLight={isLight} /><Field label="SMTP Host" value={forms.smtp.host} onChange={(v) => updateForm('smtp', 'host', v)} isLight={isLight} /><Field label="SMTP Port" type="number" value={forms.smtp.port} onChange={(v) => updateForm('smtp', 'port', v)} isLight={isLight} /><Field label="SMTP Username" value={forms.smtp.username} onChange={(v) => updateForm('smtp', 'username', v)} isLight={isLight} /><PasswordField show={showPassword} setShow={setShowPassword} value={forms.smtp.password || ''} onChange={(v) => updateForm('smtp', 'password', v)} isLight={isLight} placeholder={forms.smtp.passwordConfigured ? 'Password configured' : 'SMTP password'} /><Field label="Sender Email" value={forms.smtp.senderEmail} onChange={(v) => updateForm('smtp', 'senderEmail', v)} isLight={isLight} /><Field label="Sender Name" value={forms.smtp.senderName} onChange={(v) => updateForm('smtp', 'senderName', v)} isLight={isLight} /><Select label="Encryption" value={forms.smtp.encryption} options={['none', 'tls', 'ssl', 'starttls']} onChange={(v) => updateForm('smtp', 'encryption', v)} isLight={isLight} /><Field label="Connection Timeout" type="number" value={forms.smtp.connectionTimeout} onChange={(v) => updateForm('smtp', 'connectionTimeout', v)} isLight={isLight} /></Grid><div className="mt-4 rounded-2xl bg-white/5 p-3 text-sm text-slate-500">Provider status: {forms.smtp.lastTestStatus || 'untested'} • {forms.smtp.lastTestMessage || 'Not tested yet'}</div><div className="mt-4 flex flex-wrap gap-3"><SaveButton disabled={!canWrite || saving === 'smtp'} onClick={() => saveSection('smtp', adminApi.updateSmtpSettings)} saving={saving === 'smtp'} /><button type="button" onClick={testSmtp} disabled={!canWrite || saving === 'smtp-test'} className="rounded-2xl bg-white/10 px-5 py-3 text-sm font-bold disabled:opacity-40"><RefreshCw className={`mr-2 inline h-4 w-4 ${saving === 'smtp-test' ? 'animate-spin' : ''}`} />Test Connection</button></div></SettingsCard> : null}
 
             {active === 'templates' ? <SettingsCard title="Email Templates" icon={Mail} isLight={isLight}><div className="grid gap-4 lg:grid-cols-[320px_1fr]"><div className="space-y-2">{templates.map((template) => <button key={template.templateId} type="button" onClick={() => setTemplateDraft(clone(template))} className={`w-full rounded-2xl border p-3 text-left ${isLight ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-slate-950/40'}`}><b>{template.name}</b><p className="mt-1 text-xs text-slate-500">v{template.version} • {template.enabled ? 'Enabled' : 'Disabled'}</p></button>)}</div><div>{templateDraft ? <div className="space-y-3"><Field label="Subject" value={templateDraft.subject} onChange={(v) => setTemplateDraft({ ...templateDraft, subject: v })} isLight={isLight} /><label className="block"><span className="text-sm font-semibold">Body</span><textarea value={templateDraft.body} onChange={(e) => setTemplateDraft({ ...templateDraft, body: e.target.value })} rows="9" className={`mt-2 w-full rounded-2xl border p-4 text-sm outline-none ${isLight ? 'border-slate-200 bg-white text-slate-950' : 'border-white/10 bg-slate-900 text-white'}`} /></label><div className="rounded-2xl bg-white p-3 text-slate-950"><iframe title="Template preview" srcDoc={templateDraft.body} className="h-72 w-full rounded-xl" /></div><div className="flex flex-wrap gap-2"><SaveButton disabled={!canWrite || saving === 'template'} onClick={saveTemplate} saving={saving === 'template'} /><button type="button" onClick={() => testTemplate(templateDraft.templateId)} disabled={!canWrite} className="rounded-2xl bg-white/10 px-5 py-3 text-sm font-bold disabled:opacity-40">Send Test</button><button type="button" onClick={() => setTemplateDraft(null)} className="rounded-2xl bg-white/10 px-5 py-3 text-sm font-bold">Close</button></div></div> : <p className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-500">Select a template to preview or edit.</p>}</div></div></SettingsCard> : null}
-
-            {active === 'numbers' ? <SettingsCard title="Emergency Numbers" icon={Phone} isLight={isLight}><Grid><Field label="Service" value={numberForm.service} onChange={(v) => setNumberForm({ ...numberForm, service: v })} isLight={isLight} /><Field label="Number" value={numberForm.number} onChange={(v) => setNumberForm({ ...numberForm, number: v })} isLight={isLight} /><Field label="Category" value={numberForm.category} onChange={(v) => setNumberForm({ ...numberForm, category: v })} isLight={isLight} /><Field label="Country" value={numberForm.country} onChange={(v) => setNumberForm({ ...numberForm, country: v })} isLight={isLight} /><Field label="State" value={numberForm.state} onChange={(v) => setNumberForm({ ...numberForm, state: v })} isLight={isLight} /><Field label="City" value={numberForm.city} onChange={(v) => setNumberForm({ ...numberForm, city: v })} isLight={isLight} /><Field label="Priority" type="number" value={numberForm.priority} onChange={(v) => setNumberForm({ ...numberForm, priority: v })} isLight={isLight} /><Toggle label="Enabled" checked={numberForm.enabled} onChange={(v) => setNumberForm({ ...numberForm, enabled: v })} isLight={isLight} /></Grid><Field label="Description" value={numberForm.description} onChange={(v) => setNumberForm({ ...numberForm, description: v })} isLight={isLight} /><div className="mt-4 flex gap-2"><SaveButton disabled={!canWrite} onClick={saveNumber} saving={false} label={editingNumber ? 'Update Number' : 'Add Number'} /><button type="button" onClick={() => { setEditingNumber(null); setNumberForm(defaultEmergencyForm); }} className="rounded-2xl bg-white/10 px-5 py-3 text-sm font-bold">Reset</button></div><div className="mt-5 grid gap-3">{numbers.map((item) => <div key={item._id} className={`rounded-2xl border p-4 ${isLight ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-slate-950/40'}`}><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><b>{item.service}</b><p className="text-sm text-slate-500">{item.number} • {item.category} • {item.country}</p></div><div className="flex gap-2"><button type="button" onClick={() => editNumber(item)} className="rounded-xl bg-white/10 px-3 py-2 text-xs font-bold">Edit</button><button type="button" onClick={() => deleteNumber(item._id)} disabled={!canWrite} className="rounded-xl bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300 disabled:opacity-40"><Trash2 className="h-3 w-3" /></button></div></div></div>)}</div></SettingsCard> : null}
 
             {active === 'application' ? <SettingsCard title="Application Configuration" icon={SlidersHorizontal} isLight={isLight}><Grid>{Object.keys(forms.application).map((key) => <Field key={key} label={labelize(key)} value={forms.application[key]} onChange={(v) => updateForm('application', key, v)} isLight={isLight} />)}</Grid><SaveButton disabled={!canWrite || saving === 'application'} onClick={() => saveSection('application', adminApi.updateApplicationSettings)} saving={saving === 'application'} /></SettingsCard> : null}
             {active === 'theme' ? <SettingsCard title="Theme Settings" icon={Palette} isLight={isLight}><Grid><Select label="Default Theme" value={forms.theme.defaultTheme} options={['light', 'dark', 'system']} onChange={(v) => updateForm('theme', 'defaultTheme', v)} isLight={isLight} /><Field label="Primary Color" value={forms.theme.primaryColor} onChange={(v) => updateForm('theme', 'primaryColor', v)} isLight={isLight} /><Field label="Accent Color" value={forms.theme.accentColor} onChange={(v) => updateForm('theme', 'accentColor', v)} isLight={isLight} /><Select label="Sidebar Style" value={forms.theme.sidebarStyle} options={['compact', 'comfortable']} onChange={(v) => updateForm('theme', 'sidebarStyle', v)} isLight={isLight} /><Field label="Card Radius" type="number" value={forms.theme.cardRadius} onChange={(v) => updateForm('theme', 'cardRadius', v)} isLight={isLight} /><Field label="Animation Speed" type="number" value={forms.theme.animationSpeed} onChange={(v) => updateForm('theme', 'animationSpeed', v)} isLight={isLight} /></Grid><div className="mt-4 rounded-3xl border border-white/10 p-5" style={{ borderRadius: Number(forms.theme.cardRadius || 24), transitionDuration: `${forms.theme.animationSpeed || 250}ms` }}><div className="h-3 w-24 rounded-full" style={{ background: forms.theme.primaryColor }} /><p className="mt-3 text-sm text-slate-500">Live preview card</p></div><SaveButton disabled={!canWrite || saving === 'theme'} onClick={() => saveSection('theme', adminApi.updateThemeSettings)} saving={saving === 'theme'} /></SettingsCard> : null}
@@ -198,7 +154,7 @@ function AdminSettingsPage() {
 const labelize = (key) => key.replace(/([A-Z])/g, ' $1').replace(/^./, (char) => char.toUpperCase());
 
 function SettingsCard({ title, icon: Icon, children, isLight }) {
-  return <section className={`rounded-3xl border p-5 shadow-sm ${isLight ? 'border-slate-200 bg-white' : 'border-white/10 bg-white/[0.05]'}`}><div className="mb-5 flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-2xl bg-red-500/10 text-red-400"><Icon className="h-5 w-5" /></span><h2 className="text-lg font-bold">{title}</h2></div>{children}</section>;
+  return <section className={`rounded-3xl border p-5 shadow-sm transition md:p-6 ${isLight ? 'border-slate-200 bg-white' : 'border-white/10 bg-white/[0.045]'}`}><div className="mb-6 flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-2xl bg-red-500/10 text-red-400"><Icon className="h-5 w-5" /></span><div><h2 className="text-lg font-black tracking-tight">{title}</h2><p className="mt-0.5 text-xs text-slate-500">Keep this section simple, accurate and production-ready.</p></div></div>{children}</section>;
 }
 
 function Grid({ children }) {
@@ -206,27 +162,27 @@ function Grid({ children }) {
 }
 
 function Field({ label, value, onChange, isLight, type = 'text' }) {
-  return <label className="block"><span className="text-sm font-semibold">{label}</span><input type={type} value={value ?? ''} onChange={(event) => onChange(type === 'number' ? Number(event.target.value) : event.target.value)} className={`mt-2 h-12 w-full rounded-2xl border px-4 outline-none focus:border-red-400 ${isLight ? 'border-slate-200 bg-slate-50 text-slate-950' : 'border-white/10 bg-slate-950 text-white'}`} /></label>;
+  return <label className="block"><span className="text-sm font-bold">{label}</span><input type={type} value={value ?? ''} onChange={(event) => onChange(type === 'number' ? Number(event.target.value) : event.target.value)} className={`mt-2 h-12 w-full rounded-2xl border px-4 text-sm outline-none transition focus:border-red-400 focus:ring-4 focus:ring-red-500/10 ${isLight ? 'border-slate-200 bg-slate-50 text-slate-950 hover:bg-white' : 'border-white/10 bg-slate-950/70 text-white hover:border-white/20'}`} /></label>;
 }
 
 function PasswordField({ show, setShow, value, onChange, isLight, placeholder }) {
-  return <label className="block"><span className="text-sm font-semibold">SMTP Password</span><span className="relative mt-2 block"><input type={show ? 'text' : 'password'} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className={`h-12 w-full rounded-2xl border px-4 pr-12 outline-none focus:border-red-400 ${isLight ? 'border-slate-200 bg-slate-50 text-slate-950' : 'border-white/10 bg-slate-950 text-white'}`} /><button type="button" onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl p-2 text-slate-500">{show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></span></label>;
+  return <label className="block"><span className="text-sm font-bold">SMTP Password</span><span className="relative mt-2 block"><input type={show ? 'text' : 'password'} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className={`h-12 w-full rounded-2xl border px-4 pr-12 text-sm outline-none transition placeholder:text-slate-500 focus:border-red-400 focus:ring-4 focus:ring-red-500/10 ${isLight ? 'border-slate-200 bg-slate-50 text-slate-950 hover:bg-white' : 'border-white/10 bg-slate-950/70 text-white hover:border-white/20'}`} /><button type="button" onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-xl p-2 text-slate-500 transition hover:bg-white/10 hover:text-red-300">{show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></span></label>;
 }
 
 function Select({ label, value, options, onChange, isLight }) {
-  return <label className="block"><span className="text-sm font-semibold">{label}</span><select value={value ?? ''} onChange={(event) => onChange(event.target.value)} className={`mt-2 h-12 w-full rounded-2xl border px-4 outline-none focus:border-red-400 ${isLight ? 'border-slate-200 bg-slate-50 text-slate-950' : 'border-white/10 bg-slate-950 text-white'}`}>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>;
+  return <label className="block"><span className="text-sm font-bold">{label}</span><select value={value ?? ''} onChange={(event) => onChange(event.target.value)} className={`mt-2 h-12 w-full rounded-2xl border px-4 text-sm outline-none transition focus:border-red-400 focus:ring-4 focus:ring-red-500/10 ${isLight ? 'border-slate-200 bg-slate-50 text-slate-950 hover:bg-white' : 'border-white/10 bg-slate-950/70 text-white hover:border-white/20'}`}>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>;
 }
 
 function Toggle({ label, checked, onChange, isLight }) {
-  return <label className={`flex min-h-12 items-center justify-between rounded-2xl border px-4 ${isLight ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-slate-950'}`}><span className="text-sm font-semibold">{label}</span><input type="checkbox" checked={Boolean(checked)} onChange={(event) => onChange(event.target.checked)} className="h-5 w-5" /></label>;
+  return <label className={`flex min-h-12 items-center justify-between rounded-2xl border px-4 transition ${isLight ? 'border-slate-200 bg-slate-50 hover:bg-white' : 'border-white/10 bg-slate-950/70 hover:border-white/20'}`}><span className="text-sm font-bold">{label}</span><input type="checkbox" checked={Boolean(checked)} onChange={(event) => onChange(event.target.checked)} className="h-5 w-5 accent-red-500" /></label>;
 }
 
 function SaveButton({ onClick, disabled, saving, label = 'Save Settings' }) {
-  return <button type="button" onClick={onClick} disabled={disabled} className="mt-5 rounded-2xl bg-red-600 px-5 py-3 text-sm font-bold text-white hover:bg-red-500 disabled:opacity-40"><Save className="mr-2 inline h-4 w-4" />{saving ? 'Saving...' : label}</button>;
+  return <button type="button" onClick={onClick} disabled={disabled} className="mt-5 rounded-2xl bg-red-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-red-950/20 transition hover:-translate-y-0.5 hover:bg-red-500 disabled:translate-y-0 disabled:opacity-40"><Save className="mr-2 inline h-4 w-4" />{saving ? 'Saving...' : label}</button>;
 }
 
 function Info({ label, value }) {
-  return <div className="rounded-2xl bg-white/5 p-4"><p className="text-xs uppercase tracking-wider text-slate-500">{label}</p><p className="mt-2 font-semibold">{String(value)}</p></div>;
+  return <div className="rounded-2xl bg-white/5 p-4"><p className="text-xs uppercase tracking-wider text-slate-500">{label}</p><p className="mt-2 font-bold">{String(value)}</p></div>;
 }
 
 export default AdminSettingsPage;
