@@ -51,9 +51,14 @@ const startServer = async () => {
       if (error.code === 'EADDRINUSE') logger.error(`Port ${PORT} is already in use.`);
     });
   } catch (error) {
+    console.error("========== SERVER START ERROR ==========");
+    console.error(error);
+    console.error(error.stack);
+
     logError(error, { scope: 'server_start' });
+
     process.exit(1);
-  }
+}
 };
 
 process.on('unhandledRejection', (reason) => {
