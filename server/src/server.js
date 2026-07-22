@@ -28,9 +28,19 @@ const startServer = async () => {
   try {
     validateEnvironment();
     await connectDB();
-    if (appConfig.isProduction || process.env.EMAIL_VERIFY_ON_STARTUP === 'true') {
-      await verifyEmailProvider();
-    }
+    if (process.env.EMAIL_VERIFY_ON_STARTUP === 'true') {
+  try {
+    await verifyEmailProvider();
+    logger.info('Email provider verification successful');
+  } catch (error) {
+    logError(error, { scope: 'email_provider_startup_verification' });
+
+    // Email failure must not stop the entire API server.
+    logger.warn(
+      'Email provider verification failed. Server will continue without verified email delivery.'
+    );
+  }
+}
     startBackupScheduler();
     server = app.listen(PORT, () => {
       logger.info(`Server running on port ${PORT}`, { port: PORT, environment: process.env.NODE_ENV || 'development' });
