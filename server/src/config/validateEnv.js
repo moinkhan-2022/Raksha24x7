@@ -7,9 +7,7 @@ const requiredProduction = [
   'CLIENT_URL',
   'SERVER_URL',
   'COOKIE_SECRET',
-  'SESSION_SECRET',
-  'GOOGLE_CLIENT_ID',
-  'GOOGLE_CLIENT_SECRET'
+  'SESSION_SECRET'
 ];
 const smtpConfigured = () => (
   ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS'].every(hasValue)
