@@ -17,20 +17,19 @@ import {
 } from '../controllers/profile.controller.js';
 
 const router = Router();
-router.use(authMiddleware);
 
-router.get('/profile', getProfile);
-router.put('/profile', validateSchema({ body: profileSchemas.update, allowUnknownBody: false }), updateProfile);
-router.post('/profile/photo', uploadProfilePhoto, uploadPhoto);
-router.delete('/profile/photo', deletePhoto);
+router.get('/profile', authMiddleware, getProfile);
+router.put('/profile', authMiddleware, validateSchema({ body: profileSchemas.update, allowUnknownBody: false }), updateProfile);
+router.post('/profile/photo', authMiddleware, uploadProfilePhoto, uploadPhoto);
+router.delete('/profile/photo', authMiddleware, deletePhoto);
 
-router.get('/contacts', getContacts);
-router.post('/contacts', validateSchema({ body: profileSchemas.contact, allowUnknownBody: false }), addContact);
-router.put('/contacts/:id', validateSchema({ body: profileSchemas.contact, params: sosSchemas.idParam, allowUnknownBody: false }), updateContact);
-router.delete('/contacts/:id', validateSchema({ params: sosSchemas.idParam }), deleteContact);
-router.patch('/contacts/:id/primary', validateSchema({ params: sosSchemas.idParam }), setPrimaryContact);
+router.get('/contacts', authMiddleware, getContacts);
+router.post('/contacts', authMiddleware, validateSchema({ body: profileSchemas.contact, allowUnknownBody: false }), addContact);
+router.put('/contacts/:id', authMiddleware, validateSchema({ body: profileSchemas.contact, params: sosSchemas.idParam, allowUnknownBody: false }), updateContact);
+router.delete('/contacts/:id', authMiddleware, validateSchema({ params: sosSchemas.idParam }), deleteContact);
+router.patch('/contacts/:id/primary', authMiddleware, validateSchema({ params: sosSchemas.idParam }), setPrimaryContact);
 
-router.put('/change-password', validateSchema({ body: authSchemas.changePassword, allowUnknownBody: false }), changePassword);
-router.delete('/account', validateSchema({ body: profileSchemas.deleteAccount, allowUnknownBody: false }), deleteAccount);
+router.put('/change-password', authMiddleware, validateSchema({ body: authSchemas.changePassword, allowUnknownBody: false }), changePassword);
+router.delete('/account', authMiddleware, validateSchema({ body: profileSchemas.deleteAccount, allowUnknownBody: false }), deleteAccount);
 
 export default router;
