@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { GoogleMap, OverlayViewF, useJsApiLoader } from '@react-google-maps/api';
+import { CircleMarker, MapContainer, Marker, TileLayer, Tooltip, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { motion } from 'framer-motion';
 import {
   Clipboard,
@@ -16,10 +18,19 @@ import { useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Toast from '../components/Toast';
 import locationService from '../services/locationService';
-import { DARK_MAP_OPTIONS, GOOGLE_MAP_LIBRARIES, GOOGLE_MAP_LOADER_ID } from '../utils/googleMapConfig';
 
-const DEFAULT_CENTER = { lat: 20.5937, lng: 78.9629 };
+const DEFAULT_CENTER = [20.5937, 78.9629];
 const GEOLOCATION_OPTIONS = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
+const TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+const userIcon = L.divIcon({
+  className: '',
+  html: '<div style="display:grid;place-items:center;width:44px;height:44px;border-radius:9999px;background:#2563eb;border:4px solid #fff;box-shadow:0 18px 40px rgba(37,99,235,.45);color:white;font-weight:800;">●</div>',
+  iconSize: [44, 44],
+  iconAnchor: [22, 22],
+  popupAnchor: [0, -22]
+});
 
 const normalizeLocation = (value) => {
   if (!value) return null;
@@ -66,22 +77,15 @@ const copyText = async (text) => {
 };
 
 function GoogleMapPage() {
-  const apiKey = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 text-white">
       <Navbar dashboard />
-      {!apiKey ? (
-        <MapErrorState
-          title="Google Maps API key is missing"
-          message="Add VITE_GOOGLE_MAPS_API_KEY to client/.env, then restart the Vite development server."
-        />
-      ) : <GoogleMapExperience apiKey={apiKey} />}
+      <MapExperience />
     </div>
   );
 }
 
-function GoogleMapExperience({ apiKey }) {
+function MapExperience() {
   const routeLocation = useLocation();
   const routedLocation = useMemo(
     () => normalizeLocation(routeLocation.state?.location),
@@ -96,19 +100,13 @@ function GoogleMapExperience({ apiKey }) {
   const mountedRef = useRef(true);
   const freshLocationRef = useRef(Boolean(routedLocation));
 
-  const { isLoaded, loadError } = useJsApiLoader({
-    id: GOOGLE_MAP_LOADER_ID,
-    googleMapsApiKey: apiKey,
-    libraries: GOOGLE_MAP_LIBRARIES
-  });
-
   const showToast = (message, type = 'success') => setToast({ message, type });
 
   const setAndCenterLocation = useCallback((value) => {
     const normalized = normalizeLocation(value);
     if (!normalized || !mountedRef.current) return;
     setCurrentLocation(normalized);
-    mapRef.current?.panTo({ lat: normalized.latitude, lng: normalized.longitude });
+    mapRef.current?.setView([normalized.latitude, normalized.longitude], 17, { animate: true });
   }, []);
 
   const refreshLocation = useCallback(() => {
@@ -173,19 +171,22 @@ function GoogleMapExperience({ apiKey }) {
     return () => { mountedRef.current = false; };
   }, [refreshLocation, routedLocation, setAndCenterLocation]);
 
-  const center = currentLocation
-    ? { lat: currentLocation.latitude, lng: currentLocation.longitude }
-    : DEFAULT_CENTER;
+  useEffect(() => {
+    if (!toast.message) return undefined;
+    const timer = window.setTimeout(() => setToast({ message: '', type: 'success' }), 2500);
+    return () => window.clearTimeout(timer);
+  }, [toast.message]);
+
+  const center = currentLocation ? [currentLocation.latitude, currentLocation.longitude] : DEFAULT_CENTER;
 
   const centerMap = () => {
-    mapRef.current?.panTo(center);
-    mapRef.current?.setZoom(currentLocation ? 17 : 5);
+    mapRef.current?.setView(center, currentLocation ? 17 : 5, { animate: true });
   };
 
   const changeZoom = (amount) => {
     if (!mapRef.current) return;
     const zoom = mapRef.current.getZoom() || 15;
-    mapRef.current.setZoom(Math.min(21, Math.max(2, zoom + amount)));
+    mapRef.current.setZoom(Math.min(19, Math.max(3, zoom + amount)));
   };
 
   const copyLocation = async () => {
@@ -214,38 +215,25 @@ function GoogleMapExperience({ apiKey }) {
     }
   };
 
-  if (loadError) {
-    return <MapErrorState title="Google Maps failed to load" message="Check the API key, Maps JavaScript API access, billing configuration, and network connection." />;
-  }
-
-  if (!isLoaded) return <MapLoadingState />;
-
   return (
     <main className="mx-auto max-w-[1600px] px-3 py-3 md:px-5 md:py-5">
       <Toast message={toast.message} type={toast.type} />
       <div className="relative h-[calc(100vh-5.5rem)] min-h-[620px] overflow-hidden rounded-3xl border border-white/10 bg-slate-950 shadow-2xl shadow-blue-950/50">
-        <GoogleMap
-          mapContainerStyle={{ width: '100%', height: '100%' }}
-          center={center}
-          zoom={currentLocation ? 17 : 5}
-          options={DARK_MAP_OPTIONS}
-          onLoad={(map) => { mapRef.current = map; }}
-          onUnmount={() => { mapRef.current = null; }}
-        >
+        <MapContainer center={center} zoom={currentLocation ? 17 : 5} minZoom={3} maxZoom={19} scrollWheelZoom className="h-full w-full" zoomControl={false}>
+          <TileLayer attribution={TILE_ATTRIBUTION} url={TILE_URL} />
+          <MapBinder onReady={(map) => { mapRef.current = map; }} />
+          <RecenterMap center={center} zoom={currentLocation ? 17 : 5} />
           {currentLocation && (
-            <OverlayViewF position={center} mapPaneName="overlayMouseTarget">
-              <div className="relative -translate-x-1/2 -translate-y-1/2">
-                <span className="absolute -inset-4 animate-ping rounded-full bg-blue-400/35" />
-                <span className="absolute -inset-2 rounded-full bg-blue-400/20" />
-                <div className="relative grid h-11 w-11 place-items-center rounded-full border-4 border-white bg-blue-600 shadow-xl shadow-blue-500/50">
-                  <LocateFixed className="h-5 w-5 text-white" />
-                </div>
-              </div>
-            </OverlayViewF>
+            <>
+              <CircleMarker center={center} radius={24} pathOptions={{ color: '#38bdf8', fillColor: '#2563eb', fillOpacity: 0.25, weight: 2 }} />
+              <Marker position={center} icon={userIcon}>
+                <Tooltip direction="top" offset={[0, -22]}>Your current location</Tooltip>
+              </Marker>
+            </>
           )}
-        </GoogleMap>
+        </MapContainer>
 
-        <motion.section initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="absolute left-3 right-3 top-3 rounded-2xl border border-white/10 bg-slate-950/85 p-4 shadow-xl backdrop-blur-xl md:left-5 md:right-auto md:top-5 md:w-[390px]">
+        <motion.section initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="absolute left-3 right-3 top-3 z-[800] rounded-2xl border border-white/10 bg-slate-950/85 p-4 shadow-xl backdrop-blur-xl md:left-5 md:right-auto md:top-5 md:w-[390px]">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-medium uppercase tracking-[0.22em] text-blue-300">Interactive Safety Map</p>
@@ -269,13 +257,13 @@ function GoogleMapExperience({ apiKey }) {
           ) : <p className="mt-4 text-sm text-slate-300">No location is available yet.</p>}
         </motion.section>
 
-        <div className="absolute right-3 top-[11.5rem] flex flex-col gap-2 md:right-5 md:top-5">
+        <div className="absolute right-3 top-[11.5rem] z-[800] flex flex-col gap-2 md:right-5 md:top-5">
           <MapControl icon={Plus} label="Zoom in" onClick={() => changeZoom(1)} />
           <MapControl icon={Minus} label="Zoom out" onClick={() => changeZoom(-1)} />
           <MapControl icon={Crosshair} label="Center location" onClick={centerMap} />
         </div>
 
-        <div className="absolute bottom-3 left-3 right-3 grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-slate-950/85 p-3 shadow-xl backdrop-blur-xl sm:grid-cols-4 md:bottom-5 md:left-1/2 md:right-auto md:w-auto md:-translate-x-1/2">
+        <div className="absolute bottom-3 left-3 right-3 z-[800] grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-slate-950/85 p-3 shadow-xl backdrop-blur-xl sm:grid-cols-4 md:bottom-5 md:left-1/2 md:right-auto md:w-auto md:-translate-x-1/2">
           <ActionButton icon={RefreshCw} label={locating ? 'Locating...' : 'Refresh'} onClick={refreshLocation} disabled={locating} spin={locating} />
           <ActionButton icon={Clipboard} label="Copy Link" onClick={copyLocation} disabled={!currentLocation} />
           <ActionButton icon={Share2} label="Share" onClick={shareLocation} disabled={!currentLocation} />
@@ -286,12 +274,18 @@ function GoogleMapExperience({ apiKey }) {
   );
 }
 
-function MapLoadingState() {
-  return <main className="mx-auto max-w-[1600px] px-3 py-3 md:px-5 md:py-5"><div className="grid h-[calc(100vh-5.5rem)] min-h-[620px] place-items-center rounded-3xl border border-white/10 bg-white/5"><div className="text-center"><RefreshCw className="mx-auto h-8 w-8 animate-spin text-blue-300" /><p className="mt-3 text-slate-300">Loading secure map...</p></div></div></main>;
+function MapBinder({ onReady }) {
+  const map = useMap();
+  useEffect(() => { onReady(map); }, [map, onReady]);
+  return null;
 }
 
-function MapErrorState({ title, message }) {
-  return <main className="mx-auto grid min-h-[calc(100vh-4.5rem)] max-w-3xl place-items-center px-4 py-10"><div className="w-full rounded-3xl border border-rose-400/30 bg-rose-500/10 p-8 text-center backdrop-blur-xl"><MapPin className="mx-auto h-10 w-10 text-rose-300" /><h1 className="mt-4 text-2xl font-bold">{title}</h1><p className="mx-auto mt-3 max-w-xl text-slate-300">{message}</p></div></main>;
+function RecenterMap({ center, zoom }) {
+  const map = useMap();
+  useEffect(() => {
+    map.setView(center, zoom, { animate: true });
+  }, [center, map, zoom]);
+  return null;
 }
 
 function Alert({ message, warning = false }) {

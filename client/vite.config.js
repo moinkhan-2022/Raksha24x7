@@ -35,7 +35,7 @@ export default defineConfig(({ mode }) => {
           manualChunks: {
             react: ['react', 'react-dom', 'react-router-dom'],
             firebase: ['firebase/app', 'firebase/auth', 'firebase/messaging'],
-            maps: ['@react-google-maps/api', 'leaflet', 'react-leaflet'],
+            maps: ['leaflet', 'react-leaflet'],
             ui: ['lucide-react', 'framer-motion']
           }
         }

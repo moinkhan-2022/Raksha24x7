@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useJsApiLoader } from '@react-google-maps/api';
 import { AlertTriangle, MapPin, RefreshCw, Search } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import NearbyFilterBar from '../components/NearbyFilterBar';
@@ -12,7 +11,6 @@ import { buildNearbyServiceNotification } from '../services/emergencyNotificatio
 import { buildGoogleMapsNavigationUrl } from '../services/navigationService';
 import { buildSearchIndex, searchIndex } from '../services/searchIndex';
 import { getServiceDistance } from '../utils/distance';
-import { GOOGLE_MAP_LIBRARIES, GOOGLE_MAP_LOADER_ID } from '../utils/googleMapConfig';
 import { ALLOWED_SEARCH_RADII } from '../utils/overpassQuery';
 import { sortServices } from '../utils/serviceResults';
 
@@ -26,7 +24,6 @@ const locationErrorMessage = (error) => {
 };
 
 function NearbyServicesPage() {
-  const apiKey = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
   const [theme] = useState(() => localStorage.getItem('raksha_theme') === 'light' ? 'light' : 'dark');
   const isLight = theme === 'light';
 
@@ -37,12 +34,12 @@ function NearbyServicesPage() {
   return (
     <div className={`min-h-screen transition-colors duration-300 ${isLight ? 'bg-slate-50 text-slate-950' : 'bg-slate-950 text-white'}`}>
       <Navbar dashboard />
-      {!apiKey ? <PageError title="Google Maps API key is missing" message="Add VITE_GOOGLE_MAPS_API_KEY to client/.env and restart Vite." theme={theme} /> : <NearbyServicesExperience apiKey={apiKey} theme={theme} />}
+      <NearbyServicesExperience theme={theme} />
     </div>
   );
 }
 
-function NearbyServicesExperience({ apiKey, theme }) {
+function NearbyServicesExperience({ theme }) {
   const isLight = theme === 'light';
   const [userLocation, setUserLocation] = useState(null);
   const [activeFilter, setActiveFilter] = useState('all');
@@ -55,12 +52,6 @@ function NearbyServicesExperience({ apiKey, theme }) {
   const [toast, setToast] = useState({ message: '', type: 'success' });
   const notifiedCategoriesRef = useRef(new Set());
   const { emergencyNotify } = useNotifications();
-
-  const { isLoaded, loadError } = useJsApiLoader({
-    id: GOOGLE_MAP_LOADER_ID,
-    googleMapsApiKey: apiKey,
-    libraries: GOOGLE_MAP_LIBRARIES
-  });
 
   const { services, loading: servicesLoading } = useNearbyServices({
     location: userLocation,
@@ -148,8 +139,6 @@ function NearbyServicesExperience({ apiKey, theme }) {
     }
   };
 
-  if (loadError) return <PageError title="Google Maps failed to load" message="Check your API key, connection, and Maps JavaScript API status." theme={theme} />;
-
   return (
     <main className="mx-auto max-w-7xl px-4 py-5 md:px-6">
       <Toast message={toast.message} type={toast.type} />
@@ -188,7 +177,7 @@ function NearbyServicesExperience({ apiKey, theme }) {
       ) : (
         <section className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_420px]">
           <div className={`h-[55vh] min-h-[420px] overflow-hidden rounded-3xl border shadow-sm lg:sticky lg:top-20 lg:h-[calc(100vh-6rem)] ${isLight ? 'border-slate-200 bg-white' : 'border-white/10 bg-slate-900'}`}>
-            {userLocation && isLoaded ? (
+            {userLocation ? (
               <NearbyMap
                 userLocation={userLocation}
                 services={filteredServices}
